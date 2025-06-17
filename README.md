@@ -19,10 +19,10 @@ flutter pub get
 flutter run
 ```
 
-apk ファイルへのビルドはもできます。
+apk ファイルへのビルドもできます。
 
 ```bash
-flutter build apk
+flutter build apk --release
 ```
 
 ## おことわり

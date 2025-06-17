@@ -200,7 +200,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
             throw ArgumentError("Unexpected betting_code: $bettingCode");
         }
         int c = (int.parse(ticketFormat) + 1) ~/ 2;
-        if (bettingCode == "5" && ticketFormat == "3") {
+        if ((bettingCode == "3" || bettingCode == "5") && ticketFormat == "3") {
           c += 1;
         }
         di["馬番"] = [
@@ -244,34 +244,27 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
 
       List<int> nos = [];
       String purchaseAmountStr = "";
-      for (int i = 0; i < 5; i++) {
-        nos.add(int.parse(itr.next() + itr.next()));
+      int count;
+      switch (ticketFormat) {
+        case "1":
+          count = 5;
+          break;
+        case "3":
+          count = 10;
+          break;
+        default:
+          count = 18;
       }
-      final originalPos = itr.position;
-      itr.move(5);
-      String sixth = itr.next();
-      String seventh = itr.next();
-      itr.currentPosition = originalPos;
-      if (!(sixth == "9" && seventh == "0")) {
-        for (int i = 0; i < 5; i++) {
-          nos.add(int.parse(itr.next() + itr.next()));
+      for (int i = 0; i < count; i++) {
+        final no = itr.next() + itr.next();
+        if (no != "00") {
+          nos.add(int.parse(no));
         }
       }
-      final originalPos2 = itr.position;
-      itr.move(5);
-      String sixth2 = itr.next();
-      String seventh2 = itr.next();
-      itr.currentPosition = originalPos2;
-      if (!(sixth2 == "9" && seventh2 == "0")) {
-        for (int i = 0; i < 8; i++) {
-          nos.add(int.parse(itr.next() + itr.next()));
-        }
-      }
+      di["馬番"] = nos;
       for (int i = 0; i < 5; i++) {
         purchaseAmountStr += itr.next();
       }
-      di["馬番"] = nos.where((x) => x != 0).toList();
-
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
 
       underDigits[15] = bettingCode;

@@ -48,14 +48,17 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
     try {
       parsedData = parseHorseracingTicketQr(preferred);
+      debugPrint("Read: $preferred");
     } catch (_) {
       try {
         parsedData = parseHorseracingTicketQr(alt);
+        debugPrint("Read: $alt");
       } catch (e) {
         parsedData = {'エラー': '解析に失敗しました', '詳細': e.toString()};
+        debugPrint("Read 1: $first");
+        debugPrint("Read 2: $second");
       }
     }
-
     Navigator.of(context).pop(parsedData);
   }
 
