@@ -22,7 +22,7 @@ flutter run
 apk ファイルへのビルドはもできます。
 
 ```bash
-flutter build apk
+flutter build apk --release
 ```
 
 ## おことわり
