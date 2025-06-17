@@ -55,6 +55,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
         debugPrint("Read: $alt");
       } catch (e) {
         parsedData = {'エラー': '解析に失敗しました', '詳細': e.toString()};
+        debugPrint("Read 1: $first");
+        debugPrint("Read 2: $second");
       }
     }
     Navigator.of(context).pop(parsedData);
