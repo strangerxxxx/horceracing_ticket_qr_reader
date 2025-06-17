@@ -200,7 +200,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
             throw ArgumentError("Unexpected betting_code: $bettingCode");
         }
         int c = (int.parse(ticketFormat) + 1) ~/ 2;
-        if (bettingCode == "5" && ticketFormat == "3") {
+        if ((bettingCode == "3" || bettingCode == "5") && ticketFormat == "3") {
           c += 1;
         }
         di["馬番"] = [
