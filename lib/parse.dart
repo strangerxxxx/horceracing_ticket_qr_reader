@@ -127,6 +127,8 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
       d["開催種別"] = "代替";
     } else if (alternativeCode == "7") {
       d["開催種別"] = "継続";
+    } else if (alternativeCode == "4") {
+      d["開催種別"] = "代2";
     } else {
       d["開催種別"] = "不明";
     }
