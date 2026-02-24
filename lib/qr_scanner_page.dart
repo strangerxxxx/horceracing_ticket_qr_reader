@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:horceracing_ticket_qr_reader/parse.dart';
+import 'package:horceracing_ticket_qr_reader/parse_local.dart';
 
 class QRScannerPage extends StatefulWidget {
   const QRScannerPage({super.key});
@@ -47,12 +48,20 @@ class _QRScannerPageState extends State<QRScannerPage> {
     }
 
     try {
-      parsedData = parseHorseracingTicketQr(preferred);
-      debugPrint("Read: $preferred");
+      debugPrint("Parse: $preferred");
+      if (preferred.substring(3, 4) == "1") {
+        parsedData = parseHorseracingTicketQrLocal(preferred);
+      } else {
+        parsedData = parseHorseracingTicketQr(preferred);
+      }
     } catch (_) {
       try {
-        parsedData = parseHorseracingTicketQr(alt);
-        debugPrint("Read: $alt");
+        debugPrint("Parse: $alt");
+        if (alt.substring(3, 4) == "1") {
+          parsedData = parseHorseracingTicketQrLocal(alt);
+        } else {
+          parsedData = parseHorseracingTicketQr(alt);
+        }
       } catch (e) {
         parsedData = {'エラー': '解析に失敗しました', '詳細': e.toString()};
         debugPrint("Read 1: $first");
