@@ -1,3 +1,5 @@
+import 'package:horceracing_ticket_qr_reader/string_iterator.dart';
+
 const Map<String, String> racecourseDict = {
   "01": "札幌",
   "02": "函館",
@@ -112,7 +114,7 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
 
   Map<String, dynamic> d = {};
   d["QR"] = s;
-  _StringIterator itr = _StringIterator(s);
+  StringIterator itr = StringIterator(s);
 
   String ticketFormat = itr.next();
 
@@ -478,40 +480,4 @@ String joinWithSpaces(List<String> underDigits) {
   }
 
   return buffer.toString();
-}
-
-class _StringIterator {
-  final String _s;
-  int _currentPosition = 0;
-
-  _StringIterator(this._s);
-
-  String next() {
-    if (_currentPosition >= _s.length) {
-      throw StateError("No more elements in the string.");
-    }
-    return _s[_currentPosition++];
-  }
-
-  void move(int offset) {
-    _currentPosition += offset;
-    if (_currentPosition < 0 || _currentPosition > _s.length) {
-      throw RangeError("Invalid position after move.");
-    }
-  }
-
-  int get position => _currentPosition;
-
-  set currentPosition(int pos) {
-    _currentPosition = pos;
-  }
-
-  /// Peek ahead without advancing the iterator.
-  String peek(int offset) {
-    int pos = _currentPosition + offset;
-    if (pos >= _s.length || pos < 0) {
-      throw RangeError("Peek out of range");
-    }
-    return _s[pos];
-  }
 }

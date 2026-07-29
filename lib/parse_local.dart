@@ -1,3 +1,5 @@
+import 'package:horceracing_ticket_qr_reader/string_iterator.dart';
+
 const Map<String, String> racecourseDict = {
   "01": "JRA札幌",
   "02": "JRA函館",
@@ -165,7 +167,7 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
 
   Map<String, dynamic> d = {};
   d["QR"] = s;
-  _StringIterator itr = _StringIterator(s);
+  StringIterator itr = StringIterator(s);
 
   String ticketFormat = itr.next();
 
@@ -199,14 +201,7 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
   d["回"] = int.parse(time);
   d["日"] = int.parse(day);
   d["レース"] = int.parse(itr.next() + itr.next());
-  // String suffix = [
-  //   d["年"],
-  //   jyoCdDict[racecourseCode],
-  //   d["回"],  // レースの開催月2桁にする必要がある
-  //   d["日"],  // レースの開催日2桁にする必要がある
-  //   d["レース"],
-  // ].map((n) => n.toString().padLeft(2, '0')).join();
-  // d["URL"] = "https://db.netkeiba.com/race/20$suffix";
+
   String typeCode = itr.next();
   d["券種"] = typeDict[typeCode];
   underDigits[4] = typeCode;
@@ -291,14 +286,8 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
 
         if (underDigits[5] == "0") {
           underDigits[5] = bettingCode;
-          //   underDigits[18] = (int.parse(underDigits[18]) + 1).toString();
         } else {
-          // if (underDigits[6] == "0") {
-          //     underDigits[17] = underDigits[18];
-          //     underDigits[18] = "0";
-          // }
           underDigits[6] = bettingCode;
-          //   underDigits[18] = (int.parse(underDigits[18]) + 1).toString();
         }
         (d["購入内容"] as List).add(di);
       }
@@ -335,12 +324,6 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
 
       underDigits[5] = bettingCode;
-      // if ((di["馬番"] as List).length < 10) {
-      //   underDigits[17] = (di["馬番"] as List).length.toString();
-      // } else {
-      //   underDigits[17] = "1";
-      //   underDigits[18] = ((di["馬番"] as List).length % 10).toString();
-      // }
       (d["購入内容"] as List).add(di);
       break;
 
@@ -394,7 +377,7 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
           horseNumbers.add(innerList);
         }
         di["馬番"] = horseNumbers;
-        for (var list in (horseNumbers)) {
+        for (var list in horseNumbers) {
           if (list.length > count) {
             count = list.length;
           }
@@ -433,9 +416,6 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
       if (bettingCode == "6" || bettingCode == "8" || bettingCode == "9") {
         underDigits[7] = wheelCode;
       }
-
-      // underDigits[17] = (count ~/ 10).toString();
-      // underDigits[18] = (count % 10).toString();
       (d["購入内容"] as List).add(di);
       break;
 
@@ -468,15 +448,7 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
 
       itr.next();
 
-      // underDigits[13] = "2";
       underDigits[5] = bettingCode;
-      // for (int i = 0; i < di["馬番"].length; i++) {
-      //   String st = (di["馬番"][i] as List).length.toString();
-      //   underDigits[16 + i] = st[st.length - 1];
-      //   if (st.length == 2) {
-      //     underDigits[15] = (int.parse(underDigits[15]) + (1 << i)).toString();
-      //   }
-      // }
       (d["購入内容"] as List).add(di);
       break;
 
@@ -519,8 +491,6 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
       di["馬番"] = horseNumbersList;
 
       underDigits[5] = bettingCode;
-      // underDigits[17] = (d["組合せ数"] ~/ 10).toString();
-      // underDigits[18] = (d["組合せ数"] % 10).toString();
       (d["購入内容"] as List).add(di);
       break;
 
@@ -549,40 +519,4 @@ String joinWithSpaces(List<String> underDigits) {
   }
 
   return buffer.toString();
-}
-
-class _StringIterator {
-  final String _s;
-  int _currentPosition = 0;
-
-  _StringIterator(this._s);
-
-  String next() {
-    if (_currentPosition >= _s.length) {
-      throw StateError("No more elements in the string.");
-    }
-    return _s[_currentPosition++];
-  }
-
-  void move(int offset) {
-    _currentPosition += offset;
-    if (_currentPosition < 0 || _currentPosition > _s.length) {
-      throw RangeError("Invalid position after move.");
-    }
-  }
-
-  int get position => _currentPosition;
-
-  set currentPosition(int pos) {
-    _currentPosition = pos;
-  }
-
-  /// Peek ahead without advancing the iterator.
-  String peek(int offset) {
-    int pos = _currentPosition + offset;
-    if (pos >= _s.length || pos < 0) {
-      throw RangeError("Peek out of range");
-    }
-    return _s[pos];
-  }
 }

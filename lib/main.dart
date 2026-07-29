@@ -36,7 +36,7 @@ class MyApp extends StatelessWidget {
         textTheme: const TextTheme(bodyMedium: TextStyle(color: Colors.white)),
         colorScheme: const ColorScheme.dark(primary: Colors.green),
       ),
-      themeMode: ThemeMode.system, // ← システムのテーマに従う（必要なら ThemeMode.dark に変更）
+      themeMode: ThemeMode.system,
     );
   }
 }
@@ -50,12 +50,31 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   Map<String, dynamic>? parsedResult;
 
+  /// 現在表示中の TextSpan に使われている Recognizer をまとめて管理する。
+  /// parsedResult が更新されるたびに古い Recognizer を dispose して新しいものに差し替える。
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  @override
+  void dispose() {
+    _disposeRecognizers();
+    super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+  }
+
   void _openQRScanner() async {
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(builder: (_) => const QRScannerPage()),
     );
 
     if (result != null) {
+      // 古い Recognizer を解放してから新しい結果をセットする
+      _disposeRecognizers();
       setState(() {
         parsedResult = result;
       });
@@ -108,14 +127,17 @@ class _MyHomePageState extends State<MyHomePage> {
       final urlMatch = RegExp(r'"URL"\s*:\s*"([^"]+)"').firstMatch(line);
       if (urlMatch != null) {
         final url = urlMatch.group(1)!;
+        // Recognizer を _recognizers に登録して後で dispose できるようにする
+        final recognizer = TapGestureRecognizer()
+          ..onTap = () {
+            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+          };
+        _recognizers.add(recognizer);
         spans.add(
           TextSpan(
             text: '$line\n',
             style: const TextStyle(color: Colors.blue),
-            recognizer: (TapGestureRecognizer()
-              ..onTap = () {
-                launchUrl(Uri.parse(url));
-              }),
+            recognizer: recognizer,
           ),
         );
       } else {
