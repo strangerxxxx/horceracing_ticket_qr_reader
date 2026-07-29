@@ -206,18 +206,16 @@ class TicketResultView extends StatelessWidget {
   static String _formatValue(dynamic value) {
     if (value is int) return value.toString();
     if (value is String) return value;
-    if (value is List) {
-      if (value.isEmpty) return '';
-      if (value.first is int) {
-        return (value as List<int>).join(', ');
-      }
-      if (value.first is List) {
-        return value
-            .map((inner) => (inner as List<int>).join(','))
-            .join(' - ');
-      }
-    }
+    if (value is List) return _formatList(value);
     return value.toString();
+  }
+
+  static String _formatList(List list) {
+    if (list.isEmpty) return '';
+    if (list.first is List) {
+      return list.map((inner) => _formatList(inner as List)).join(' - ');
+    }
+    return list.map((e) => e.toString()).join(', ');
   }
 }
 

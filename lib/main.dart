@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'history_page.dart';
 import 'qr_scanner_page.dart';
+import 'scan_history_service.dart';
 import 'ticket_result_view.dart';
 
 void main() {
@@ -54,16 +56,32 @@ class _MyHomePageState extends State<MyHomePage> {
     );
 
     if (result != null) {
+      await ScanHistoryService.add(result);
       setState(() {
         parsedResult = result;
       });
     }
   }
 
+  void _openHistory() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const HistoryPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("馬券QRリーダー")),
+      appBar: AppBar(
+        title: const Text("馬券QRリーダー"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: '履歴',
+            onPressed: _openHistory,
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
