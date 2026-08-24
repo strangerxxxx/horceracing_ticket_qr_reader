@@ -1,11 +1,110 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// QR解析結果を表形式で表示するウィジェット
-class TicketResultView extends StatelessWidget {
+import 'race_result.dart';
+import 'race_result_fetcher.dart';
+import 'ticket_payout_checker.dart';
+
+/// 金額を3桁カンマ区切りで表示する
+String _formatYen(int amount, {bool showSign = false}) {
+  final sign = amount < 0
+      ? '-'
+      : (showSign && amount > 0 ? '+' : '');
+  final digits = amount.abs().toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) {
+      buffer.write(',');
+    }
+    buffer.write(digits[i]);
+  }
+  return '$sign$buffer円';
+}
+
+int? _asInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value.replaceAll(',', ''));
+  return null;
+}
+class TicketResultView extends StatefulWidget {
   final Map<String, dynamic> data;
 
   const TicketResultView({super.key, required this.data});
+
+  @override
+  State<TicketResultView> createState() => _TicketResultViewState();
+}
+
+class _TicketResultViewState extends State<TicketResultView> {
+  RaceResult? _raceResult;
+  List<PurchaseCheckResult?> _checkResults = [];
+  bool _loading = false;
+  String? _error;
+
+  Map<String, dynamic> get data => widget.data;
+
+  @override
+  void initState() {
+    super.initState();
+    if (data['URL'] != null && !data.containsKey('エラー')) {
+      _loadRaceResult();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant TicketResultView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data) {
+      _raceResult = null;
+      _checkResults = [];
+      _error = null;
+      if (data['URL'] != null && !data.containsKey('エラー')) {
+        _loadRaceResult();
+      }
+    }
+  }
+
+  Future<void> _loadRaceResult() async {
+    final url = data['URL']?.toString();
+    if (url == null || url.isEmpty) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final result = await RaceResultFetcher.fetch(url);
+      if (!mounted) return;
+
+      final purchases = data['購入内容'];
+      final checks = <PurchaseCheckResult?>[];
+      if (purchases is List) {
+        for (final item in purchases) {
+          if (item is Map) {
+            checks.add(
+              TicketPayoutChecker.checkPurchase(data, item, result),
+            );
+          } else {
+            checks.add(null);
+          }
+        }
+      }
+
+      setState(() {
+        _raceResult = result;
+        _checkResults = checks;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'レース結果の取得に失敗しました';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +118,10 @@ class TicketResultView extends StatelessWidget {
         _buildSection(context, 'レース情報', _raceInfoRows(context)),
         const SizedBox(height: 16),
         _buildPurchaseSection(context),
+        if (data['URL'] != null) ...[
+          const SizedBox(height: 16),
+          _buildResultCheckSection(context),
+        ],
         if (data['下端番号'] != null) ...[
           const SizedBox(height: 16),
           _buildSection(context, 'その他', [
@@ -60,6 +163,175 @@ class TicketResultView extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildResultCheckSection(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '的中判定',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '再取得',
+                  onPressed: _loading ? null : _loadRaceResult,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+            const Divider(),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_error != null)
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              )
+            else if (_raceResult == null)
+              Text(
+                'レース結果を取得していません',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              )
+            else if (!_raceResult!.hasResults)
+              Text(
+                'レース結果がまだ公開されていません',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              )
+            else ...[
+              _buildOverallSummary(context),
+              const SizedBox(height: 16),
+              _buildOfficialPayouts(context),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverallSummary(BuildContext context) {
+    final valid = _checkResults.whereType<PurchaseCheckResult>().toList();
+    final hits = valid.where((r) => r.hit).length;
+    final totalPayout = valid.fold<int>(0, (sum, r) => sum + r.payoutYen);
+    final purchases = data['購入内容'];
+    var totalStake = 0;
+    if (purchases is List) {
+      for (final item in purchases) {
+        if (item is Map && item['購入金額'] is int) {
+          totalStake += item['購入金額'] as int;
+        }
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          hits > 0 ? '的中あり（$hits件）' : '的中なし',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: hits > 0
+                ? Colors.red.shade700
+                : Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _InfoRow(label: '購入合計', value: _formatYen(totalStake)),
+        _InfoRow(label: '払戻合計', value: _formatYen(totalPayout)),
+        _InfoRow(
+          label: '収支',
+          value: _formatYen(totalPayout - totalStake, showSign: true),
+        ),
+      ],
+    );
+  }
+
+  /// 購入した式別の公式当たり組合せと払戻（100円あたり）
+  Widget _buildOfficialPayouts(BuildContext context) {
+    final betTypes = _purchasedBetTypes();
+    if (betTypes.isEmpty || _raceResult == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '公式払戻（購入した式別）',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (final betType in betTypes) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildBetTypePayouts(context, betType),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBetTypePayouts(BuildContext context, String betType) {
+    final payouts = _raceResult!.payoutsFor(_normalizeBetType(betType));
+    if (payouts.isEmpty) {
+      return _InfoRow(label: betType, value: '払戻なし');
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          betType,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        for (final payout in payouts)
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 2),
+            child: Text(
+              '${payout.combinationLabel}　${_formatYen(payout.payoutPer100Yen)}',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+      ],
+    );
+  }
+
+  List<String> _purchasedBetTypes() {
+    final purchases = data['購入内容'];
+    if (purchases is! List) return [];
+
+    final types = <String>[];
+    for (final item in purchases) {
+      if (item is! Map) continue;
+      final betType = item['式別']?.toString();
+      if (betType == null || betType.isEmpty) continue;
+      if (!types.contains(betType)) {
+        types.add(betType);
+      }
+    }
+    return types;
+  }
+
+  static String _normalizeBetType(String betType) =>
+      betType == '馬番連単' ? '馬単' : betType;
 
   List<Widget> _raceInfoRows(BuildContext context) {
     final rows = <Widget>[];
@@ -143,7 +415,11 @@ class TicketResultView extends StatelessWidget {
             const Divider(),
             for (var i = 0; i < purchases.length; i++) ...[
               if (i > 0) const SizedBox(height: 12),
-              _buildPurchaseItem(context, purchases[i]),
+              _buildPurchaseItem(
+                context,
+                purchases[i],
+                i < _checkResults.length ? _checkResults[i] : null,
+              ),
             ],
           ],
         ),
@@ -151,7 +427,11 @@ class TicketResultView extends StatelessWidget {
     );
   }
 
-  Widget _buildPurchaseItem(BuildContext context, dynamic item) {
+  Widget _buildPurchaseItem(
+    BuildContext context,
+    dynamic item,
+    PurchaseCheckResult? check,
+  ) {
     if (item is! Map) return const SizedBox.shrink();
 
     final rows = <Widget>[];
@@ -167,8 +447,9 @@ class TicketResultView extends StatelessWidget {
     addField('軸', item['軸']);
     addField('相手', item['相手']);
     addField('ウラ', item['ウラ']);
-    if (item['購入金額'] != null) {
-      addField('購入金額', '${item['購入金額']}円');
+    final amount = _asInt(item['購入金額']);
+    if (amount != null) {
+      addField('購入金額', _formatYen(amount));
     }
 
     return Container(
@@ -181,7 +462,13 @@ class TicketResultView extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: rows,
+        children: [
+          if (check != null) ...[
+            _HitBadge(result: check),
+            const SizedBox(height: 8),
+          ],
+          ...rows,
+        ],
       ),
     );
   }
@@ -213,9 +500,63 @@ class TicketResultView extends StatelessWidget {
   static String _formatList(List list) {
     if (list.isEmpty) return '';
     if (list.first is List) {
-      return list.map((inner) => _formatList(inner as List)).join(' - ');
+      return list.map((inner) => _formatList(inner as List)).join(' / ');
     }
     return list.map((e) => e.toString()).join(', ');
+  }
+}
+
+class _HitBadge extends StatelessWidget {
+  final PurchaseCheckResult result;
+
+  const _HitBadge({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg;
+    final Color fg;
+    final String label;
+
+    if (result.hit) {
+      bg = Colors.red.shade50;
+      fg = Colors.red.shade800;
+      label = result.payoutYen > 0
+          ? '的中  払戻 ${_formatYen(result.payoutYen)}'
+          : '的中';
+    } else if (result.note != null) {
+      bg = Theme.of(context).colorScheme.surfaceContainerHighest;
+      fg = Theme.of(context).colorScheme.onSurfaceVariant;
+      label = result.note!;
+    } else {
+      bg = Theme.of(context).colorScheme.surfaceContainerHighest;
+      fg = Theme.of(context).colorScheme.onSurfaceVariant;
+      label = '外れ';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: fg, fontWeight: FontWeight.bold),
+          ),
+          if (result.hit && result.matchedLabels.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '的中組合せ: ${result.matchedLabels.join(' / ')}',
+              style: TextStyle(color: fg, fontSize: 12),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
