@@ -46,6 +46,8 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>This app needs camera access to scan QR codes</string>
+	<string>馬券のQRコードをカメラで読み取るために使用します</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>保存された画像から馬券のQRコードを読み取るために使用します</string>
 </dict>
 </plist>

@@ -50,9 +50,11 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   Map<String, dynamic>? parsedResult;
 
-  void _openQRScanner() async {
+  void _openQRScanner({bool openGalleryOnStart = false}) async {
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
-      MaterialPageRoute(builder: (_) => const QRScannerPage()),
+      MaterialPageRoute(
+        builder: (_) => QRScannerPage(openGalleryOnStart: openGalleryOnStart),
+      ),
     );
 
     if (result != null) {
@@ -86,9 +88,23 @@ class _MyHomePageState extends State<MyHomePage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            ElevatedButton(
-              onPressed: _openQRScanner,
-              child: const Text("QRコード読み取り"),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _openQRScanner(),
+                    child: const Text("QRコード読み取り"),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openQRScanner(openGalleryOnStart: true),
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: const Text("画像から読み取り"),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             Expanded(

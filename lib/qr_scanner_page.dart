@@ -1,10 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:horceracing_ticket_qr_reader/parse.dart';
 import 'package:horceracing_ticket_qr_reader/parse_local.dart';
 
 class QRScannerPage extends StatefulWidget {
-  const QRScannerPage({super.key});
+  /// true の場合、画面表示後にギャラリー選択を開く
+  final bool openGalleryOnStart;
+
+  const QRScannerPage({super.key, this.openGalleryOnStart = false});
 
   @override
   State<QRScannerPage> createState() => _QRScannerPageState();
@@ -17,10 +22,23 @@ class _QRScannerPageState extends State<QRScannerPage> {
   // 処理済みフラグ: 2枚揃った後の余分なコールバックを無視する
   bool _processed = false;
 
+  bool _analyzingImage = false;
+
   // MobileScannerController を明示的に保持して dispose する
   final MobileScannerController _controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.normal,
+    formats: const [BarcodeFormat.qrCode],
   );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.openGalleryOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _pickAndAnalyzeImage();
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -36,13 +54,16 @@ class _QRScannerPageState extends State<QRScannerPage> {
   }
 
   void _onDetect(BarcodeCapture capture) {
-    // 2枚処理済みなら以降のコールバックは無視する
+    if (_processed || _analyzingImage) return;
+    _ingestBarcodes(capture);
+  }
+
+  void _ingestBarcodes(BarcodeCapture capture) {
     if (_processed) return;
 
     for (final barcode in capture.barcodes) {
       final rawValue = barcode.rawValue;
       if (rawValue == null || rawValue.isEmpty) continue;
-      // 既に読み取り済みの値は重複して追加しない
       if (_qrResults.contains(rawValue)) continue;
 
       _qrResults.add(rawValue);
@@ -50,9 +71,69 @@ class _QRScannerPageState extends State<QRScannerPage> {
       if (_qrResults.length == 2) {
         _processed = true;
         _processTwoQRs(_qrResults[0], _qrResults[1]);
-        return; // ループを抜けて以降のバーコードを処理しない
+        return;
       }
     }
+
+    if (mounted && _qrResults.length == 1) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _pickAndAnalyzeImage() async {
+    if (_processed || _analyzingImage) return;
+
+    if (kIsWeb) {
+      _showMessage('Webでは画像からの読み取りに対応していません');
+      return;
+    }
+
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery);
+    if (image == null || !mounted) return;
+
+    setState(() => _analyzingImage = true);
+
+    try {
+      final capture = await _controller.analyzeImage(
+        image.path,
+        formats: const [BarcodeFormat.qrCode],
+      );
+
+      if (!mounted) return;
+
+      if (capture == null || capture.barcodes.isEmpty) {
+        _showMessage('画像からQRコードを検出できませんでした');
+        return;
+      }
+
+      final before = _qrResults.length;
+      _ingestBarcodes(capture);
+
+      if (_processed) return;
+
+      final added = _qrResults.length - before;
+      if (added == 0) {
+        _showMessage('新しいQRコードは検出されませんでした');
+      } else if (_qrResults.length == 1) {
+        _showMessage('1枚目を読み取りました。もう1枚の画像を選ぶか、カメラで読み取ってください');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showMessage('画像の解析に失敗しました');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _analyzingImage = false);
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   void _processTwoQRs(String first, String second) {
@@ -86,7 +167,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
       }
     }
 
-    // Navigator がまだ使える状態かチェックしてから pop する
     if (mounted) {
       Navigator.of(context).pop(parsedData);
     }
@@ -104,7 +184,16 @@ class _QRScannerPageState extends State<QRScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('QRコードを読み取る')),
+      appBar: AppBar(
+        title: const Text('QRコードを読み取る'),
+        actions: [
+          IconButton(
+            tooltip: '画像から読み取り',
+            onPressed: _analyzingImage ? null : _pickAndAnalyzeImage,
+            icon: const Icon(Icons.photo_library_outlined),
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           MobileScanner(
@@ -112,7 +201,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
             controller: _controller,
             onDetect: _onDetect,
           ),
-          // 1枚目を読み取った後、2枚目待ちのガイド表示
           if (_qrResults.length == 1)
             const Align(
               alignment: Alignment.bottomCenter,
@@ -123,12 +211,17 @@ class _QRScannerPageState extends State<QRScannerPage> {
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     child: Text(
-                      '1枚目を読み取りました。2枚目をかざしてください。',
+                      '1枚目を読み取りました。2枚目をかざすか、画像を選んでください。',
                       style: TextStyle(color: Colors.white),
                     ),
                   ),
                 ),
               ),
+            ),
+          if (_analyzingImage)
+            const ColoredBox(
+              color: Colors.black45,
+              child: Center(child: CircularProgressIndicator()),
             ),
         ],
       ),
