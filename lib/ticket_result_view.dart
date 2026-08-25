@@ -1,3 +1,5 @@
+import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'a11y_widgets.dart';
@@ -13,6 +15,28 @@ import 'race_result_fetcher.dart';
 import 'scan_history_service.dart';
 import 'ticket.dart';
 import 'ticket_payout_checker.dart';
+
+/// 的中判定の永続化だけで変わるキー（再取得のトリガーにしない）
+const _persistedMetaKeys = {
+  'レース名',
+  '開催日',
+  '購入合計',
+  '払戻合計',
+  '的中件数',
+  '結果取得済',
+};
+
+const _deepEquals = DeepCollectionEquality();
+
+/// 馬券本体（開催・購入内容など）が同じか。メタ更新による再フェッチ抑止用。
+@visibleForTesting
+bool ticketDataCoreEquals(Map<String, dynamic> a, Map<String, dynamic> b) {
+  Map<String, dynamic> core(Map<String, dynamic> source) => {
+        for (final e in source.entries)
+          if (!_persistedMetaKeys.contains(e.key)) e.key: e.value,
+      };
+  return _deepEquals.equals(core(a), core(b));
+}
 
 /// 金額を3桁カンマ区切りで表示する
 String _formatYen(int amount, {bool showSign = false}) {
@@ -63,6 +87,9 @@ class _TicketResultViewState extends State<TicketResultView> {
   String? _resolvedUrl;
   String? _urlResolveError;
 
+  /// 古い非同期結果を捨てるための世代番号
+  int _loadGeneration = 0;
+
   Map<String, dynamic> get data => widget.data;
 
   Ticket get ticket => Ticket.fromMap(data);
@@ -105,12 +132,16 @@ class _TicketResultViewState extends State<TicketResultView> {
   @override
   void didUpdateWidget(covariant TicketResultView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.data != widget.data) {
+    // 払戻メタの書き戻しでは再取得しない（的中バッジの点滅を防ぐ）
+    if (!ticketDataCoreEquals(oldWidget.data, widget.data)) {
+      _loadGeneration++;
       _raceResult = null;
       _checkResults = [];
       _error = null;
       _resolvedUrl = null;
       _urlResolveError = null;
+      _loading = false;
+      _resolvingUrl = false;
       _bootstrap();
     }
   }
@@ -118,15 +149,17 @@ class _TicketResultViewState extends State<TicketResultView> {
   Future<void> _bootstrap() async {
     if (ticket.hasError) return;
 
+    final generation = ++_loadGeneration;
+
     if (ticket.resultUrl != null) {
-      await _loadRaceResult();
+      await _loadRaceResult(generation: generation);
       return;
     }
 
-    await _resolveLocalUrlIfNeeded();
+    await _resolveLocalUrlIfNeeded(generation: generation);
   }
 
-  Future<void> _resolveLocalUrlIfNeeded() async {
+  Future<void> _resolveLocalUrlIfNeeded({required int generation}) async {
     final code = ticket.venueCode;
     final venue = ticket.venueName;
     final year = ticket.year;
@@ -157,7 +190,7 @@ class _TicketResultViewState extends State<TicketResultView> {
         day: day,
         race: race,
       );
-      if (!mounted) return;
+      if (!_isCurrentGeneration(generation)) return;
 
       if (!result.isSuccess) {
         setState(() {
@@ -172,15 +205,15 @@ class _TicketResultViewState extends State<TicketResultView> {
         _resolvedUrl = result.url;
         _resolvingUrl = false;
       });
-      await _loadRaceResult();
+      await _loadRaceResult(generation: generation);
     } on HttpFetchException catch (e) {
-      if (!mounted) return;
+      if (!_isCurrentGeneration(generation)) return;
       setState(() {
         _resolvingUrl = false;
         _urlResolveError = e.message;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!_isCurrentGeneration(generation)) return;
       setState(() {
         _resolvingUrl = false;
         _urlResolveError = '開催日の取得に失敗しました';
@@ -188,7 +221,13 @@ class _TicketResultViewState extends State<TicketResultView> {
     }
   }
 
-  Future<void> _loadRaceResult({bool forceRefresh = false}) async {
+  bool _isCurrentGeneration(int generation) =>
+      mounted && generation == _loadGeneration;
+
+  Future<void> _loadRaceResult({
+    bool forceRefresh = false,
+    required int generation,
+  }) async {
     final url = _effectiveUrl;
     if (url == null || url.isEmpty) return;
 
@@ -202,7 +241,7 @@ class _TicketResultViewState extends State<TicketResultView> {
         url,
         forceRefresh: forceRefresh,
       );
-      if (!mounted) return;
+      if (!_isCurrentGeneration(generation)) return;
 
       final purchases = ticket.purchases;
       final checks = <PurchaseCheckResult?>[];
@@ -212,6 +251,15 @@ class _TicketResultViewState extends State<TicketResultView> {
         );
       }
 
+      // 一度確定した判定を、一時的な未公開パースで上書きしない
+      if (!result.hasResults &&
+          _raceResult != null &&
+          _raceResult!.hasResults &&
+          !forceRefresh) {
+        setState(() => _loading = false);
+        return;
+      }
+
       setState(() {
         _raceResult = result;
         _checkResults = checks;
@@ -219,13 +267,13 @@ class _TicketResultViewState extends State<TicketResultView> {
       });
       await _persistRaceMeta(result, checks);
     } on HttpFetchException catch (e) {
-      if (!mounted) return;
+      if (!_isCurrentGeneration(generation)) return;
       setState(() {
         _loading = false;
         _error = e.message;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!_isCurrentGeneration(generation)) return;
       setState(() {
         _loading = false;
         _error = 'レース結果の取得に失敗しました';
@@ -254,20 +302,34 @@ class _TicketResultViewState extends State<TicketResultView> {
     }
 
     final stake = TicketPayoutChecker.summarizeTicket(ticket);
-    updates['購入合計'] = stake.totalAmountYen;
+    if (data['購入合計'] != stake.totalAmountYen) {
+      updates['購入合計'] = stake.totalAmountYen;
+    }
 
     final removeKeys = <String>[];
     if (result.hasResults) {
       final valid = checks.whereType<PurchaseCheckResult>().toList();
       final hits = valid.where((r) => r.hit).length;
       final totalPayout = valid.fold<int>(0, (sum, r) => sum + r.payoutYen);
-      updates['払戻合計'] = totalPayout;
-      updates['的中件数'] = hits;
-      updates['結果取得済'] = true;
+      if (data['払戻合計'] != totalPayout) updates['払戻合計'] = totalPayout;
+      if (data['的中件数'] != hits) updates['的中件数'] = hits;
+      if (data['結果取得済'] != true) updates['結果取得済'] = true;
+    } else if (data['結果取得済'] == true) {
+      // 既に確定済みなら、未公開扱いの一時結果で履歴ラベルを消さない
     } else {
-      updates['結果取得済'] = false;
-      removeKeys.addAll(['払戻合計', '的中件数']);
+      if (data['結果取得済'] != false) updates['結果取得済'] = false;
+      if (data.containsKey('払戻合計') || data.containsKey('的中件数')) {
+        removeKeys.addAll(['払戻合計', '的中件数']);
+      }
     }
+
+    if (updates.isEmpty && removeKeys.isEmpty) return;
+
+    final merged = {...data, ...updates};
+    for (final key in removeKeys) {
+      merged.remove(key);
+    }
+    if (_deepEquals.equals(merged, data)) return;
 
     final historyEntryId = widget.historyEntryId;
     if (historyEntryId != null) {
@@ -279,10 +341,6 @@ class _TicketResultViewState extends State<TicketResultView> {
     }
 
     if (!mounted) return;
-    final merged = {...data, ...updates};
-    for (final key in removeKeys) {
-      merged.remove(key);
-    }
     widget.onDataUpdated?.call(merged);
   }
 
@@ -380,10 +438,16 @@ class _TicketResultViewState extends State<TicketResultView> {
                   onPressed: (_loading || _resolvingUrl)
                       ? null
                       : () async {
+                          final generation = ++_loadGeneration;
                           if (_effectiveUrl == null) {
-                            await _resolveLocalUrlIfNeeded();
+                            await _resolveLocalUrlIfNeeded(
+                              generation: generation,
+                            );
                           } else {
-                            await _loadRaceResult(forceRefresh: true);
+                            await _loadRaceResult(
+                              forceRefresh: true,
+                              generation: generation,
+                            );
                           }
                         },
                   icon: const Icon(Icons.refresh),

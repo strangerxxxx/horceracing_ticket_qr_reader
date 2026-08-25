@@ -17,28 +17,26 @@ class RaceResultCache {
 
   static Future<RaceResult?> read(String url) async {
     try {
-      final file = await _cacheFile(url);
-      if (!await file.exists()) return null;
-
-      final raw = jsonDecode(await file.readAsString());
-      if (raw is! Map) return null;
-
-      final cachedAtRaw = raw['cachedAt'] as String?;
-      final resultRaw = raw['result'];
-      if (cachedAtRaw == null || resultRaw is! Map) return null;
-
-      final cachedAt = DateTime.tryParse(cachedAtRaw);
-      if (cachedAt == null) return null;
-
-      final result = RaceResult.fromJson(Map<String, dynamic>.from(resultRaw));
-      if (!_isFresh(result, cachedAt)) return null;
-      return result;
+      final cached = await _readRaw(url);
+      if (cached == null) return null;
+      if (!_isFresh(cached.result, cached.cachedAt)) return null;
+      return cached.result;
     } catch (_) {
       return null;
     }
   }
 
   static Future<void> write(String url, RaceResult result) async {
+    // 払戻確定済みを、一時的な未公開結果で上書きしない
+    if (!(result.hasResults && result.layoutRecognized)) {
+      final existing = await _readRaw(url);
+      if (existing != null &&
+          existing.result.hasResults &&
+          existing.result.layoutRecognized) {
+        return;
+      }
+    }
+
     final file = await _cacheFile(url);
     await file.parent.create(recursive: true);
     await file.writeAsString(
@@ -48,6 +46,26 @@ class RaceResultCache {
       }),
       flush: true,
     );
+  }
+
+  static Future<({RaceResult result, DateTime cachedAt})?> _readRaw(
+    String url,
+  ) async {
+    final file = await _cacheFile(url);
+    if (!await file.exists()) return null;
+
+    final raw = jsonDecode(await file.readAsString());
+    if (raw is! Map) return null;
+
+    final cachedAtRaw = raw['cachedAt'] as String?;
+    final resultRaw = raw['result'];
+    if (cachedAtRaw == null || resultRaw is! Map) return null;
+
+    final cachedAt = DateTime.tryParse(cachedAtRaw);
+    if (cachedAt == null) return null;
+
+    final result = RaceResult.fromJson(Map<String, dynamic>.from(resultRaw));
+    return (result: result, cachedAt: cachedAt);
   }
 
   static bool _isFresh(RaceResult result, DateTime cachedAt) {

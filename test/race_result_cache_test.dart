@@ -116,4 +116,15 @@ void main() {
     final restored = RaceResult.fromJson(original.toJson());
     expect(restored.layoutRecognized, isFalse);
   });
+
+  test('complete cache is not overwritten by incomplete result', () async {
+    final url = sample(hasResults: true).url;
+    await RaceResultCache.write(url, sample(hasResults: true));
+    await RaceResultCache.write(url, sample(hasResults: false));
+
+    final cached = await RaceResultCache.read(url);
+    expect(cached, isNotNull);
+    expect(cached!.hasResults, isTrue);
+    expect(cached.raceName, 'テストS');
+  });
 }
