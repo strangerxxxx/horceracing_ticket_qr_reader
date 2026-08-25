@@ -462,7 +462,7 @@ class _TicketResultViewState extends State<TicketResultView> {
       );
     }
 
-    final sepText = ordered ? ' → ' : ' - ';
+    final sepText = ordered ? ' > ' : ' - ';
     return _joinParts(
       [
         for (final n in parts)
