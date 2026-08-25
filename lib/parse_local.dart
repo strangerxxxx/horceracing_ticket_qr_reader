@@ -406,8 +406,13 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
           di["ながし"] = "ながし";
       }
       int count = 0;
-      if (bettingCode == "6") {
-        // 地方の馬番連単ながし: 軸(2桁) + 金額(5) + 相手ビットマップ(18)
+      // 普通馬複・ワイド・馬番連単ながし、およびフォーマット1の枠番連複ながし:
+      // 軸(2桁) + 金額(5) + 相手ビットマップ(18)
+      final useSingleAxisNagashi = bettingCode == "6" ||
+          bettingCode == "5" ||
+          bettingCode == "7" ||
+          (bettingCode == "3" && ticketFormat == "1");
+      if (useSingleAxisNagashi) {
         di["軸"] = int.parse(itr.next() + itr.next());
         String purchaseAmountStr = "";
         for (int i = 0; i < 5; i++) {
@@ -422,11 +427,8 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
         }
         di["相手"] = innerList;
         count = innerList.length;
-      } else if (bettingCode == "3" ||
-          bettingCode == "5" ||
-          bettingCode == "7" ||
-          bettingCode == "8") {
-        // 枠番連複・普通馬複・ワイド・馬3連複ながし:
+      } else if (bettingCode == "3" || bettingCode == "8") {
+        // 枠番連複（フォーマット2以降）・馬3連複ながし:
         // 軸ビットマップ2面 + 相手ビットマップ1面 + 金額
         List<int> horseNumbers = [];
         for (int j = 0; j < 2; j++) {
@@ -456,7 +458,11 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
           }
           horseNumbers.add(innerList);
         }
-        di["馬番"] = horseNumbers;
+        // 1・3着 / 2・3着は券面ビットマップが「軸・軸・相手」順のため着順に並べ替える
+        di["馬番"] = _normalizeTrifectaNagashiSlots(
+          horseNumbers,
+          di["ながし"]?.toString() ?? "",
+        );
         for (var list in horseNumbers) {
           if (list.length > count) {
             count = list.length;
@@ -465,9 +471,7 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
       } else {
         throw ArgumentError("Unexpected nagashi betting_code: $bettingCode");
       }
-      if (bettingCode == "3" ||
-          bettingCode == "5" ||
-          bettingCode == "7" ||
+      if ((bettingCode == "3" && ticketFormat != "1") ||
           bettingCode == "8" ||
           bettingCode == "9") {
         String purchaseAmountStr = "";
@@ -531,6 +535,24 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
 bool _isJraRacecourse(String code) {
   final n = int.tryParse(code);
   return n != null && n >= 1 && n <= 10;
+}
+
+/// 3連単ながしのビットマップを着順スロット [1着, 2着, 3着] に揃える。
+///
+/// 券面は軸の着を先に並べることがあり、1・3着ながしは
+/// `[1着軸, 3着軸, 2着相手]`、2・3着ながしは `[2着軸, 3着軸, 1着相手]` になる。
+List<List<int>> _normalizeTrifectaNagashiSlots(
+  List<List<int>> slots,
+  String nagashi,
+) {
+  if (slots.length < 3) return slots;
+  if (nagashi == "1・3着ながし") {
+    return [slots[0], slots[2], slots[1]];
+  }
+  if (nagashi == "2・3着ながし") {
+    return [slots[2], slots[0], slots[1]];
+  }
+  return slots;
 }
 
 String joinWithSpaces(List<String> underDigits) {

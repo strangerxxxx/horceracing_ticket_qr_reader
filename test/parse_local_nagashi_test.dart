@@ -27,10 +27,11 @@ void main() {
     final purchase = (result['購入内容'] as List).first as Map;
     expect(purchase['式別'], '馬3連単');
     expect(purchase['ながし'], '1・3着ながし');
+    // 券面は [1着軸7, 3着軸5, 相手6] → 着順 [7, 6, 5]
     expect(purchase['馬番'], [
       [7],
-      [5],
       [6],
+      [5],
     ]);
   });
 
@@ -46,6 +47,22 @@ void main() {
       [2, 5],
       [8],
     ]);
+  });
+
+  test('JRA 3連単 3着ながし', () {
+    final result = parseHorseracingTicketQr(
+      '5010001901011120414416525772242310113997779600000000000110000000000000000110000000000000000001000000001056789012345678901234567890123456789012345678901234567890123456789012345678901234560518',
+    );
+    final purchase = (result['購入内容'] as List).first as Map;
+    expect(purchase['式別'], '3連単');
+    expect(purchase['ながし'], '3着ながし');
+    expect(purchase['馬番'], [
+      [12, 13],
+      [12, 13],
+      [14],
+    ]);
+    expect(purchase['購入金額'], 100);
+    expect(result['マルチ'], 'なし');
   });
 
   test('JRA 3連単 1・2着ながしは従来どおり', () {

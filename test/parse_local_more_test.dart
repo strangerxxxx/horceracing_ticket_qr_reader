@@ -106,6 +106,42 @@ void main() {
     expect(purchase['購入金額'], 100);
   });
 
+  test('フォーマット1 枠番連複ながし 1→2,4,5,7,8 各100円', () {
+    final result = parseHorseracingTicketQrLocal(
+      '1131000113000610209867881003098282644800533299315331010000101011011000000000089012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234560663',
+    );
+    expect(result['券種'], 'ながし');
+    expect(result['開催場'], '園田');
+    final purchase = (result['購入内容'] as List).first as Map;
+    expect(purchase['式別'], '枠番連複');
+    expect(purchase['ながし'], 'ながし');
+    expect(purchase['軸'], 1);
+    expect(purchase['相手'], [2, 4, 5, 7, 8]);
+    expect(purchase['購入金額'], 100);
+    expect(
+      TicketPayoutChecker.summarizePurchase(result, purchase).combinationCount,
+      5,
+    );
+  });
+
+  test('普通馬複ながし 5→6,9,11,13 各100円', () {
+    final result = parseHorseracingTicketQrLocal(
+      '1571000708000110200007734130185769583130903760214551050000100000100101010000000001234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123460633',
+    );
+    expect(result['券種'], 'ながし');
+    expect(result['開催場'], '船橋');
+    final purchase = (result['購入内容'] as List).first as Map;
+    expect(purchase['式別'], '普通馬複');
+    expect(purchase['ながし'], 'ながし');
+    expect(purchase['軸'], 5);
+    expect(purchase['相手'], [6, 9, 11, 13]);
+    expect(purchase['購入金額'], 100);
+    expect(
+      TicketPayoutChecker.summarizePurchase(result, purchase).combinationCount,
+      4,
+    );
+  });
+
   test('応援馬券 14番 単勝・複勝各100円', () {
     final result = parseHorseracingTicketQrLocal(
       '5071000103000811520442291020290099964000231398211511400000012140000001000012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890160658',

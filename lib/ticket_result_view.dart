@@ -324,6 +324,22 @@ class _TicketResultViewState extends State<TicketResultView> {
     final hits = valid.where((r) => r.hit).length;
     final totalPayout = valid.fold<int>(0, (sum, r) => sum + r.payoutYen);
     final stake = TicketPayoutChecker.summarizeTicket(data);
+    final labelStyle = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    const valueStyle = TextStyle(fontWeight: FontWeight.w500);
+    final summaryRows = [
+      ('組合せ', '${stake.totalCombinationCount}点'),
+      ('購入合計', _formatYen(stake.totalAmountYen)),
+      ('払戻合計', _formatYen(totalPayout)),
+      (
+        '収支',
+        _formatYen(
+          totalPayout - stake.totalAmountYen,
+          showSign: true,
+        ),
+      ),
+    ];
 
     return Semantics(
       label: hits > 0 ? '的中あり、$hits件' : '的中なし',
@@ -340,15 +356,36 @@ class _TicketResultViewState extends State<TicketResultView> {
             ),
           ),
           const SizedBox(height: 8),
-          _InfoRow(label: '組合せ', value: '${stake.totalCombinationCount}点'),
-          _InfoRow(label: '購入合計', value: _formatYen(stake.totalAmountYen)),
-          _InfoRow(label: '払戻合計', value: _formatYen(totalPayout)),
-          _InfoRow(
-            label: '収支',
-            value: _formatYen(
-              totalPayout - stake.totalAmountYen,
-              showSign: true,
-            ),
+          Table(
+            columnWidths: const {
+              0: FixedColumnWidth(80),
+              1: IntrinsicColumnWidth(),
+            },
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            children: [
+              for (final (label, value) in summaryRows)
+                TableRow(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: ExcludeSemantics(
+                        child: Text(label, style: labelStyle),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Semantics(
+                        label: '$label、$value',
+                        child: Text(
+                          value,
+                          textAlign: TextAlign.right,
+                          style: valueStyle,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
           ),
         ],
       ),
@@ -396,31 +433,38 @@ class _TicketResultViewState extends State<TicketResultView> {
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 4),
-        for (final payout in payouts)
-          Padding(
-            padding: const EdgeInsets.only(left: 8, bottom: 4),
-            child: MergeSemantics(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+        Table(
+          columnWidths: const {
+            0: IntrinsicColumnWidth(),
+            1: IntrinsicColumnWidth(),
+          },
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          children: [
+            for (final payout in payouts)
+              TableRow(
                 children: [
-                  Flexible(
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8, right: 8, bottom: 4),
                     child: _buildPayoutCombination(
                       payout.combinationKey,
                       betType,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Semantics(
-                    label: '払戻 ${_formatYen(payout.payoutPer100Yen)}',
-                    child: Text(
-                      _formatYen(payout.payoutPer100Yen),
-                      style: const TextStyle(fontWeight: FontWeight.w500),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Semantics(
+                      label: '払戻 ${_formatYen(payout.payoutPer100Yen)}',
+                      child: Text(
+                        _formatYen(payout.payoutPer100Yen),
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
+          ],
+        ),
       ],
     );
   }
