@@ -37,6 +37,12 @@ class _QRScannerPageState extends State<QRScannerPage> {
   bool _processed = false;
   bool _analyzingImage = false;
 
+  /// 続けて読む成功直後の再検出抑制
+  DateTime? _scanPausedUntil;
+
+  /// 直前に成功したQR。枠から外れるまで再読取しない
+  final Set<String> _blockedQrs = {};
+
   final MobileScannerController _controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.normal,
     formats: const [BarcodeFormat.qrCode],
@@ -44,6 +50,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   static const _guideText =
       '馬券のQRコードは2枚あります。両方を枠内にかざすか、2枚が写った画像を選んでください。';
+
+  static const _continuousCooldown = Duration(milliseconds: 800);
 
   @override
   void initState() {
@@ -79,6 +87,13 @@ class _QRScannerPageState extends State<QRScannerPage> {
     });
   }
 
+  /// ユーザー操作のやり直しでは直前成功分のブロックも解除する
+  void _resetScanForUser() {
+    _blockedQrs.clear();
+    _scanPausedUntil = null;
+    _resetScan();
+  }
+
   Future<void> _toggleTorch() async {
     try {
       await _controller.toggleTorch();
@@ -91,7 +106,27 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   void _onDetect(BarcodeCapture capture) {
     if (_processed || _analyzingImage) return;
+    if (_isScanPaused) return;
+
+    if (_blockedQrs.isNotEmpty) {
+      final seen = <String>{
+        for (final b in capture.barcodes)
+          if (b.rawValue != null && b.rawValue!.isNotEmpty) b.rawValue!,
+      };
+      // 直前の馬券がまだ写っている間は次の読取を始めない
+      if (seen.intersection(_blockedQrs).isNotEmpty) return;
+      _blockedQrs.clear();
+    }
+
     _ingestBarcodes(capture);
+  }
+
+  bool get _isScanPaused {
+    final until = _scanPausedUntil;
+    if (until == null) return false;
+    if (DateTime.now().isBefore(until)) return true;
+    _scanPausedUntil = null;
+    return false;
   }
 
   void _ingestBarcodes(BarcodeCapture capture) {
@@ -138,6 +173,10 @@ class _QRScannerPageState extends State<QRScannerPage> {
     }
 
     if (image == null || !mounted) return;
+
+    // 画像選択は明示操作なので、直前馬券のブロックは解除する
+    _blockedQrs.clear();
+    _scanPausedUntil = null;
 
     setState(() => _analyzingImage = true);
 
@@ -220,7 +259,9 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
       SnackBar(content: Text(message)),
     );
   }
@@ -264,6 +305,11 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
     if (widget.continuousMode) {
       widget.onTicketParsed?.call(parsedData);
+      _blockedQrs
+        ..clear()
+        ..add(first)
+        ..add(second);
+      _scanPausedUntil = DateTime.now().add(_continuousCooldown);
       _showMessage('読み取りました。次の馬券をかざしてください');
       _resetScan();
       return;
@@ -297,7 +343,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
     if (!mounted) return;
 
     if (retry == true) {
-      _resetScan();
+      _resetScanForUser();
     } else {
       Navigator.of(context).pop();
     }
@@ -389,7 +435,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
                   if (_qrResults.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     TextButton.icon(
-                      onPressed: _resetScan,
+                      onPressed: _resetScanForUser,
                       icon: const Icon(Icons.refresh, color: Colors.white),
                       label: const Text(
                         'やり直す',
@@ -435,7 +481,9 @@ class _QRScannerPageState extends State<QRScannerPage> {
             IconButton(
               tooltip: 'やり直す',
               onPressed:
-                  (_qrResults.isEmpty && !_processed) ? null : _resetScan,
+                  (_qrResults.isEmpty && !_processed && _blockedQrs.isEmpty)
+                      ? null
+                      : _resetScanForUser,
               icon: const Icon(Icons.refresh),
             ),
             IconButton(
