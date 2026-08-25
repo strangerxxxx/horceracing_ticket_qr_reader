@@ -98,6 +98,10 @@ void main() {
     expect(result.horseNamesByNumber[2], 'サンプルウマ');
     expect(result.horseNamesByNumber[1], 'ダミーバ');
     expect(result.horseName(12), 'テストホース');
+    expect(result.frameByHorseNumber[12], 2);
+    expect(result.frameByHorseNumber[2], 1);
+    expect(result.frameByHorseNumber[1], 3);
+    expect(result.fieldSize, 12);
   });
 
   test('checkPurchase detects win and loss', () {

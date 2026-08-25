@@ -25,11 +25,19 @@ class RaceResult {
   /// 馬番 → 馬名（レース結果表から取得。無い場合は空）
   final Map<int, String> horseNamesByNumber;
 
+  /// 馬番 → 枠番（レース結果表から取得。無い場合は空）
+  final Map<int, int> frameByHorseNumber;
+
+  /// 出走頭数（結果表から判明した最大馬番。不明時は null）
+  final int? fieldSize;
+
   const RaceResult({
     required this.url,
     required this.payoutsByBetType,
     required this.hasResults,
     this.horseNamesByNumber = const {},
+    this.frameByHorseNumber = const {},
+    this.fieldSize,
   });
 
   List<PayoutEntry> payoutsFor(String betType) =>

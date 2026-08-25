@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'bet_type.dart';
 import 'external_url.dart';
+import 'frame_color.dart';
 import 'local_race_url.dart';
 import 'netkeiba_urls.dart';
 import 'race_result.dart';
@@ -397,13 +398,72 @@ class _TicketResultViewState extends State<TicketResultView> {
         const SizedBox(height: 4),
         for (final payout in payouts)
           Padding(
-            padding: const EdgeInsets.only(left: 8, bottom: 2),
-            child: Text(
-              '${payout.combinationLabel}　${_formatYen(payout.payoutPer100Yen)}',
-              style: const TextStyle(fontWeight: FontWeight.w500),
+            padding: const EdgeInsets.only(left: 8, bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: _buildPayoutCombination(
+                    payout.combinationKey,
+                    betType,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _formatYen(payout.payoutPer100Yen),
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ],
             ),
           ),
       ],
+    );
+  }
+
+  /// 公式払戻の組合せキーを枠色バッジで表示する
+  Widget _buildPayoutCombination(String key, String betType) {
+    final numberIsFrame = _isFrameBet(betType);
+    final ordered = _isOrderedBet(betType);
+    final separator = ordered ? '>' : '-';
+    final parts = key
+        .split(separator)
+        .map((e) => int.tryParse(e.trim()))
+        .whereType<int>()
+        .toList();
+
+    if (parts.isEmpty) {
+      return Text(key, style: const TextStyle(fontWeight: FontWeight.w500));
+    }
+
+    // 単勝・複勝: バッジ + 馬名
+    if (betType == '単勝' || betType == '複勝') {
+      final n = parts.first;
+      final name = _raceResult?.horseName(n);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _numberBadge(n, numberIsFrame: false),
+          if (name != null && name.isNotEmpty) ...[
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                name,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    final sepText = ordered ? ' → ' : ' - ';
+    return _joinParts(
+      [
+        for (final n in parts)
+          _numberBadge(n, numberIsFrame: numberIsFrame),
+      ],
+      sepText,
     );
   }
 
@@ -560,14 +620,13 @@ class _TicketResultViewState extends State<TicketResultView> {
 
     final betType = item['式別']?.toString() ?? '';
     final ticketType = data['券種']?.toString() ?? '';
-    final horsesText = _formatPurchaseHorses(
+    final horsesWidget = _buildPurchaseHorses(
       item,
       betType: betType,
       ticketType: ticketType,
-      horseNamesByNumber: _raceResult?.horseNamesByNumber,
     );
-    if (horsesText != null) {
-      addField('馬番', horsesText);
+    if (horsesWidget != null) {
+      rows.add(_InfoRow.widget(label: '馬番', child: horsesWidget));
     }
     addField('ウラ', item['ウラ']);
 
@@ -643,111 +702,232 @@ class _TicketResultViewState extends State<TicketResultView> {
   }
 
   /// 馬単・枠単・三連単など着順のある式別
-  static bool _isOrderedBet(String betType) => isOrderedBetType(betType);
+  bool _isOrderedBet(String betType) => isOrderedBetType(betType);
 
-  static bool _isUnorderedBet(String betType) => isUnorderedBetType(betType);
+  bool _isUnorderedBet(String betType) => isUnorderedBetType(betType);
 
-  /// 購入内容の馬番表示文字列を組み立てる
-  static String? _formatPurchaseHorses(
+  bool _isFrameBet(String betType) => isFrameBetType(betType);
+
+  Widget _numberBadge(int number, {required bool numberIsFrame}) {
+    final frame = resolveFrameNumber(
+      number: number,
+      numberIsFrame: numberIsFrame,
+      frameByHorseNumber: _raceResult?.frameByHorseNumber,
+      fieldSize: _raceResult?.fieldSize,
+    );
+    return NumberBadge(number: number, frameNumber: frame);
+  }
+
+  int? _asHorseNumber(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  /// 購入内容の馬番・枠番表示
+  Widget? _buildPurchaseHorses(
     Map item, {
     required String betType,
     required String ticketType,
-    Map<int, String>? horseNamesByNumber,
   }) {
     final isBox = ticketType == 'ボックス';
     final ura = item['ウラ']?.toString() == 'あり';
+    final numberIsFrame = _isFrameBet(betType);
+    final names = _raceResult?.horseNamesByNumber;
+    final orderedSep = _orderedSeparator(betType);
 
-    // ながし（軸・相手）は式別に関わらず → でつなぐ
+    // ながし（軸・相手）
     if (item['軸'] != null && item['相手'] != null) {
       final nagashi = item['ながし']?.toString() ?? '';
-      final axisStr = _formatHorseGroup(item['軸']);
-      final partnerStr = _formatHorseGroup(item['相手']);
+      final axis = _buildNumberGroup(item['軸'], numberIsFrame: numberIsFrame);
+      final partner =
+          _buildNumberGroup(item['相手'], numberIsFrame: numberIsFrame);
       if (_isOrderedBet(betType) && nagashi.contains('2着')) {
-        return '$partnerStr > $axisStr';
+        return _joinParts([partner, axis], orderedSep);
       }
       if (_isOrderedBet(betType)) {
-        return '$axisStr > $partnerStr';
+        return _joinParts([axis, partner], orderedSep);
       }
-      return '$axisStr → $partnerStr';
+      return _joinParts([axis, partner], ' → ');
     }
 
     final horses = item['馬番'];
     if (horses is! List || horses.isEmpty) return null;
 
-    // 単勝・複勝・応援馬券（中身は単勝/複勝）: `1 馬名`
     if (betType == '単勝' || betType == '複勝') {
-      return _formatWinPlaceHorses(horses, horseNamesByNumber);
+      return _buildWinPlaceHorses(horses, names);
     }
 
     if (_isOrderedBet(betType)) {
-      return _formatOrderedSlots(horses, ura: ura, isBox: isBox);
+      return _buildOrderedSlots(
+        horses,
+        ura: ura,
+        isBox: isBox,
+        numberIsFrame: numberIsFrame,
+        orderedSep: orderedSep,
+      );
     }
 
     if (_isUnorderedBet(betType)) {
-      return _formatUnorderedSlots(horses, isBox: isBox);
+      return _buildUnorderedSlots(
+        horses,
+        isBox: isBox,
+        numberIsFrame: numberIsFrame,
+      );
     }
 
-    return _formatValue(horses);
+    return _buildNumberGroup(horses, numberIsFrame: numberIsFrame);
   }
 
-  /// 単勝・複勝: 馬番の後ろにレース結果の馬名を付ける
-  static String _formatWinPlaceHorses(
-    List horses,
-    Map<int, String>? horseNamesByNumber,
-  ) {
-    return horses.map((e) {
-      final number = e is int ? e : int.tryParse(e.toString());
-      final label = number?.toString() ?? e.toString();
-      if (number == null || horseNamesByNumber == null) return label;
-      final name = horseNamesByNumber[number];
-      if (name == null || name.isEmpty) return label;
-      return '$label $name';
-    }).join(', ');
+  /// 3連単マルチは着順不定のため <> 、それ以外の連単系は >
+  String _orderedSeparator(String betType) {
+    final multi = data['マルチ']?.toString() == 'あり';
+    if (multi && normalizeBetType(betType) == '三連単') {
+      return ' <> ';
+    }
+    return ' > ';
   }
 
-  static String _formatOrderedSlots(
+  Widget _buildWinPlaceHorses(List horses, Map<int, String>? names) {
+    final parts = <Widget>[];
+    for (final horse in horses) {
+      final n = _asHorseNumber(horse);
+      if (n == null) {
+        parts.add(Text('$horse', style: const TextStyle(fontWeight: FontWeight.w500)));
+        continue;
+      }
+      final name = names?[n];
+      parts.add(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _numberBadge(n, numberIsFrame: false),
+            if (name != null && name.isNotEmpty) ...[
+              const SizedBox(width: 4),
+              Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
+            ],
+          ],
+        ),
+      );
+    }
+    return _joinParts(parts, '');
+  }
+
+  Widget _buildOrderedSlots(
     List list, {
     required bool ura,
     required bool isBox,
+    required bool numberIsFrame,
+    required String orderedSep,
   }) {
     if (isBox) {
-      return _formatBoxHorses(list);
+      return _buildBoxHorses(list, numberIsFrame: numberIsFrame);
     }
     if (ura && list.length == 2 && list.first is! List) {
-      return '${list[0]} <> ${list[1]}';
+      return _joinParts(
+        [
+          _buildNumberGroup(list[0], numberIsFrame: numberIsFrame),
+          _buildNumberGroup(list[1], numberIsFrame: numberIsFrame),
+        ],
+        ' <> ',
+      );
     }
-    if (list.first is List) {
-      return list.map(_formatHorseGroup).join(' > ');
-    }
-    return list.map((e) => e.toString()).join(' > ');
-  }
-
-  /// 馬連・枠連・ワイド・三連複（ながし以外）: `1 - 2 - 3` / `1 - 2, 3 - 4`
-  static String _formatUnorderedSlots(List list, {required bool isBox}) {
-    if (isBox) {
-      return _formatBoxHorses(list);
-    }
-    if (list.first is List) {
-      return list.map(_formatHorseGroup).join(' - ');
-    }
-    return list.map((e) => e.toString()).join(' - ');
-  }
-
-  static String _formatBoxHorses(List list) {
     if (list.isNotEmpty && list.first is List) {
-      return list
-          .expand((inner) => inner is List ? inner : [inner])
-          .map((e) => e.toString())
-          .join(', ');
+      return _joinParts(
+        [
+          for (final slot in list)
+            _buildNumberGroup(slot, numberIsFrame: numberIsFrame),
+        ],
+        orderedSep,
+      );
     }
-    return list.map((e) => e.toString()).join(', ');
+    return _joinParts(
+      [
+        for (final e in list)
+          _buildNumberGroup(e, numberIsFrame: numberIsFrame),
+      ],
+      orderedSep,
+    );
   }
 
-  static String _formatHorseGroup(dynamic value) {
-    if (value is List) {
-      return value.map((e) => e.toString()).join(', ');
+  Widget _buildUnorderedSlots(
+    List list, {
+    required bool isBox,
+    required bool numberIsFrame,
+  }) {
+    if (isBox) {
+      return _buildBoxHorses(list, numberIsFrame: numberIsFrame);
     }
-    return value.toString();
+    if (list.isNotEmpty && list.first is List) {
+      return _joinParts(
+        [
+          for (final slot in list)
+            _buildNumberGroup(slot, numberIsFrame: numberIsFrame),
+        ],
+        ' - ',
+      );
+    }
+    return _joinParts(
+      [
+        for (final e in list)
+          _buildNumberGroup(e, numberIsFrame: numberIsFrame),
+      ],
+      ' - ',
+    );
+  }
+
+  Widget _buildBoxHorses(List list, {required bool numberIsFrame}) {
+    final numbers = <dynamic>[];
+    if (list.isNotEmpty && list.first is List) {
+      for (final inner in list) {
+        if (inner is List) {
+          numbers.addAll(inner);
+        } else {
+          numbers.add(inner);
+        }
+      }
+    } else {
+      numbers.addAll(list);
+    }
+    return _buildNumberGroup(numbers, numberIsFrame: numberIsFrame);
+  }
+
+  Widget _buildNumberGroup(dynamic value, {required bool numberIsFrame}) {
+    if (value is List) {
+      return _joinParts(
+        [
+          for (final e in value)
+            _buildNumberGroup(e, numberIsFrame: numberIsFrame),
+        ],
+        '',
+      );
+    }
+    final n = _asHorseNumber(value);
+    if (n == null) {
+      return Text(
+        value.toString(),
+        style: const TextStyle(fontWeight: FontWeight.w500),
+      );
+    }
+    return _numberBadge(n, numberIsFrame: numberIsFrame);
+  }
+
+  Widget _joinParts(List<Widget> parts, String separator) {
+    if (parts.isEmpty) return const SizedBox.shrink();
+    if (parts.length == 1) return parts.first;
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: separator.isEmpty ? 4 : 0,
+      runSpacing: 4,
+      children: [
+        for (var i = 0; i < parts.length; i++) ...[
+          if (i > 0 && separator.isNotEmpty)
+            Text(separator, style: const TextStyle(fontWeight: FontWeight.w500)),
+          parts[i],
+        ],
+      ],
+    );
   }
 }
 
@@ -807,9 +987,15 @@ class _HitBadge extends StatelessWidget {
 
 class _InfoRow extends StatelessWidget {
   final String label;
-  final String value;
+  final String? value;
+  final Widget? valueWidget;
 
-  const _InfoRow({required this.label, required this.value});
+  const _InfoRow({required this.label, required this.value})
+      : valueWidget = null;
+
+  const _InfoRow.widget({required this.label, required Widget child})
+      : value = null,
+        valueWidget = child;
 
   @override
   Widget build(BuildContext context) {
@@ -828,10 +1014,11 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
+            child: valueWidget ??
+                Text(
+                  value ?? '',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
           ),
         ],
       ),

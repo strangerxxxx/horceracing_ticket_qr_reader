@@ -48,3 +48,9 @@ bool isUnorderedBetType(String betType) {
       normalized == 'ワイド' ||
       normalized == '三連複';
 }
+
+/// 枠番を対象とする式別か（枠連・枠単）
+bool isFrameBetType(String betType) {
+  final normalized = normalizeBetType(betType);
+  return normalized == '枠連' || normalized == '枠単';
+}

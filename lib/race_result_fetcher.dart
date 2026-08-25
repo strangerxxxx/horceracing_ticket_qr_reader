@@ -4,6 +4,19 @@ import 'package:http/http.dart' as http;
 import 'bet_type.dart';
 import 'race_result.dart';
 
+/// `race_table_01` のパース結果
+class RaceTableInfo {
+  final Map<int, String> horseNamesByNumber;
+  final Map<int, int> frameByHorseNumber;
+  final int? fieldSize;
+
+  const RaceTableInfo({
+    this.horseNamesByNumber = const {},
+    this.frameByHorseNumber = const {},
+    this.fieldSize,
+  });
+}
+
 /// netkeiba のレース結果ページから払戻を取得する
 class RaceResultFetcher {
   static const _userAgent =
@@ -39,7 +52,7 @@ class RaceResultFetcher {
 
   /// テスト・デバッグ用に公開
   static RaceResult parseHtml(String html, String url) {
-    final horseNamesByNumber = parseHorseNames(html);
+    final table = parseRaceTable(html);
 
     final payBlockMatch = RegExp(
       r'class="pay_block"[\s\S]*?</dl>',
@@ -51,7 +64,9 @@ class RaceResultFetcher {
         url: url,
         payoutsByBetType: const {},
         hasResults: false,
-        horseNamesByNumber: horseNamesByNumber,
+        horseNamesByNumber: table.horseNamesByNumber,
+        frameByHorseNumber: table.frameByHorseNumber,
+        fieldSize: table.fieldSize,
       );
     }
 
@@ -102,19 +117,22 @@ class RaceResultFetcher {
       url: url,
       payoutsByBetType: payoutsByBetType,
       hasResults: payoutsByBetType.isNotEmpty,
-      horseNamesByNumber: horseNamesByNumber,
+      horseNamesByNumber: table.horseNamesByNumber,
+      frameByHorseNumber: table.frameByHorseNumber,
+      fieldSize: table.fieldSize,
     );
   }
 
-  /// `race_table_01` から馬番→馬名を読む
-  static Map<int, String> parseHorseNames(String html) {
+  /// `race_table_01` から馬番・枠番・馬名を読む
+  static RaceTableInfo parseRaceTable(String html) {
     final tableMatch = RegExp(
       r'class="race_table_01[^"]*"[\s\S]*?</table>',
       caseSensitive: false,
     ).firstMatch(html);
-    if (tableMatch == null) return const {};
+    if (tableMatch == null) return const RaceTableInfo();
 
     final names = <int, String>{};
+    final frames = <int, int>{};
     final rowPattern = RegExp(r'<tr>([\s\S]*?)</tr>', caseSensitive: false);
 
     for (final rowMatch in rowPattern.allMatches(tableMatch.group(0)!)) {
@@ -131,16 +149,33 @@ class RaceResultFetcher {
           .toList();
       // 着順 / 枠番 / 馬番 / 馬名 ...
       if (tds.length < 3) continue;
+      final frame = int.tryParse(tds[1]);
       final number = int.tryParse(tds[2]);
       if (number == null || number <= 0) continue;
 
       final name = _normalizeSpaces(nameMatch.group(1)!);
-      if (name.isEmpty) continue;
-      names[number] = name;
+      if (name.isNotEmpty) {
+        names[number] = name;
+      }
+      if (frame != null && frame >= 1 && frame <= 8) {
+        frames[number] = frame;
+      }
     }
 
-    return names;
+    final fieldSize = names.isEmpty
+        ? null
+        : names.keys.reduce((a, b) => a > b ? a : b);
+
+    return RaceTableInfo(
+      horseNamesByNumber: names,
+      frameByHorseNumber: frames,
+      fieldSize: fieldSize,
+    );
   }
+
+  /// 後方互換: 馬番→馬名のみ
+  static Map<int, String> parseHorseNames(String html) =>
+      parseRaceTable(html).horseNamesByNumber;
 
   /// 表示文字列を照合用キーに正規化する
   static String normalizeCombinationKey(String raw, String betType) {
