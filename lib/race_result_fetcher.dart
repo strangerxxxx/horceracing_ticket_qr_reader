@@ -1,7 +1,7 @@
 import 'package:charset/charset.dart';
-import 'package:http/http.dart' as http;
 
 import 'bet_type.dart';
+import 'http_fetch.dart';
 import 'race_result.dart';
 import 'race_result_cache.dart';
 
@@ -28,9 +28,6 @@ class RaceMetaInfo {
 
 /// netkeiba のレース結果ページから払戻を取得する
 class RaceResultFetcher {
-  static const _userAgent =
-      'Mozilla/5.0 (compatible; HorseRacingTicketQrReader/1.0)';
-
   /// th の class → 式別名（netkeiba 表記）
   static const _betTypeByClass = {
     'tan': '単勝',
@@ -53,13 +50,12 @@ class RaceResultFetcher {
       if (cached != null) return cached;
     }
 
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {'User-Agent': _userAgent},
-    );
+    final response = await HttpFetch.get(Uri.parse(url));
 
     if (response.statusCode != 200) {
-      throw Exception('レース結果の取得に失敗しました (${response.statusCode})');
+      throw HttpFetchException(
+        'レース結果の取得に失敗しました（HTTP ${response.statusCode}）',
+      );
     }
 
     // netkeiba は EUC-JP。馬名表示のため正しくデコードする。
@@ -78,12 +74,17 @@ class RaceResultFetcher {
     final table = parseRaceTable(html);
     final meta = parseRaceMeta(html);
 
+    final hasTable = table.horseNamesByNumber.isNotEmpty;
+    final hasMeta = (meta.raceName != null && meta.raceName!.isNotEmpty) ||
+        (meta.raceDateLabel != null && meta.raceDateLabel!.isNotEmpty);
     final payBlockMatch = RegExp(
       r'class="pay_block"[\s\S]*?</dl>',
       caseSensitive: false,
     ).firstMatch(html);
+    final hasPayBlock = payBlockMatch != null;
+    final layoutRecognized = hasTable || hasMeta || hasPayBlock;
 
-    if (payBlockMatch == null) {
+    if (!hasPayBlock) {
       return RaceResult(
         url: url,
         payoutsByBetType: const {},
@@ -93,6 +94,7 @@ class RaceResultFetcher {
         fieldSize: table.fieldSize,
         raceName: meta.raceName,
         raceDateLabel: meta.raceDateLabel,
+        layoutRecognized: layoutRecognized,
       );
     }
 
@@ -139,6 +141,10 @@ class RaceResultFetcher {
       }
     }
 
+    // pay_block はあるのに式別を1件も読めない → レイアウト変化の可能性
+    final recognized = layoutRecognized &&
+        (payoutsByBetType.isNotEmpty || hasTable || hasMeta);
+
     return RaceResult(
       url: url,
       payoutsByBetType: payoutsByBetType,
@@ -148,6 +154,7 @@ class RaceResultFetcher {
       fieldSize: table.fieldSize,
       raceName: meta.raceName,
       raceDateLabel: meta.raceDateLabel,
+      layoutRecognized: recognized || payoutsByBetType.isNotEmpty,
     );
   }
 

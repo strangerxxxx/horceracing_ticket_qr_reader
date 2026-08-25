@@ -227,4 +227,13 @@ void main() {
     expect(combos.contains('10>14>2'), isTrue);
     expect(combos.contains('2>14>10'), isTrue);
   });
+
+  test('parseHtml marks unrecognized layout when structure is missing', () {
+    final result = RaceResultFetcher.parseHtml(
+      '<html><body>hello</body></html>',
+      'https://example.com/race',
+    );
+    expect(result.layoutRecognized, isFalse);
+    expect(result.hasResults, isFalse);
+  });
 }

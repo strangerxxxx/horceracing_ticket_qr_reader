@@ -3,16 +3,30 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 
+import 'http_fetch.dart';
 import 'parse_local.dart' show jyoCdDict;
+
+/// 地方競馬 URL 解決の結果
+class LocalRaceResolveResult {
+  final String? url;
+  final String? failureReason;
+
+  const LocalRaceResolveResult._({this.url, this.failureReason});
+
+  const LocalRaceResolveResult.success(String url) : this._(url: url);
+
+  const LocalRaceResolveResult.failure(String reason)
+      : this._(failureReason: reason);
+
+  bool get isSuccess => url != null;
+}
 
 /// 地方競馬の開催日を keiba.go.jp 月次CSV + netkeiba から特定し、
 /// `https://db.netkeiba.com/race/{id}` 形式の URL を組み立てる。
 class LocalRaceUrlResolver {
-  static const _userAgent =
-      'Mozilla/5.0 (compatible; HorseRacingTicketQrReader/1.0)';
   static const _channel = MethodChannel('horceracing_ticket_qr_reader/storage');
+  static const _monthFetchConcurrency = 3;
 
   /// EUC-JP: 回=0xB2F3 / 日目=0xC6FCCCDC
   static final _roundDayPattern = RegExp(
@@ -64,38 +78,125 @@ class LocalRaceUrlResolver {
     required int day,
     required int race,
   }) async {
+    final result = await resolveDetailed(
+      racecourseCode: racecourseCode,
+      venueName: venueName,
+      year: year,
+      round: round,
+      day: day,
+      race: race,
+    );
+    return result.url;
+  }
+
+  static Future<LocalRaceResolveResult> resolveDetailed({
+    required String racecourseCode,
+    required String venueName,
+    required int year,
+    required int round,
+    required int day,
+    required int race,
+  }) async {
     final jyoCd = jyoCdDict[racecourseCode];
-    if (jyoCd == null) return null;
-    if (round <= 0 || day <= 0 || race <= 0) return null;
+    if (jyoCd == null) {
+      return const LocalRaceResolveResult.failure('未対応の競馬場コードです');
+    }
+    if (round <= 0 || day <= 0 || race <= 0) {
+      return const LocalRaceResolveResult.failure('開催情報（回・日・レース）が不正です');
+    }
 
     final months = _candidateMonths(year);
-    final dateSets = await Future.wait(
-      months.map((ym) => _venueDatesForMonth(ym.$1, ym.$2, venueName)),
+    var networkFailures = 0;
+    var monthsWithData = 0;
+
+    final dateSets = await _mapLimited(
+      months,
+      _monthFetchConcurrency,
+      (ym) async {
+        try {
+          final set = await _venueDatesForMonth(ym.$1, ym.$2, venueName);
+          if (set.isNotEmpty) monthsWithData++;
+          return set;
+        } on HttpFetchException {
+          networkFailures++;
+          return <String>{};
+        }
+      },
     );
+
     final dates = <String>{};
     for (final set in dateSets) {
       dates.addAll(set);
     }
-    if (dates.isEmpty) return null;
+    if (dates.isEmpty) {
+      if (networkFailures > 0 && monthsWithData == 0) {
+        return const LocalRaceResolveResult.failure(
+          '開催カレンダーの取得に失敗しました（通信エラー）。通信環境を確認して再取得してください',
+        );
+      }
+      return LocalRaceResolveResult.failure(
+        '「$venueName」の開催日がカレンダーに見つかりませんでした',
+      );
+    }
 
     final ordered = dates.toList()..sort();
     final startIndex = _estimatedStartIndex(ordered.length, round);
 
-    // 推定位置から左右に探索
+    var checked = 0;
+    var probeFailures = 0;
     for (final index in _searchOrder(ordered.length, startIndex)) {
       final date = ordered[index];
-      final info = await _roundDayFor(date, jyoCd);
-      if (info == null) continue;
-      if (info.$1 == round && info.$2 == day) {
-        return buildUrl(
-          westernYear: int.parse(date.substring(0, 4)),
-          jyoCd: jyoCd,
-          monthDay: date.substring(4, 8),
-          race: race,
-        );
+      checked++;
+      try {
+        final info = await _roundDayFor(date, jyoCd);
+        if (info == null) continue;
+        if (info.$1 == round && info.$2 == day) {
+          return LocalRaceResolveResult.success(
+            buildUrl(
+              westernYear: int.parse(date.substring(0, 4)),
+              jyoCd: jyoCd,
+              monthDay: date.substring(4, 8),
+              race: race,
+            ),
+          );
+        }
+      } on HttpFetchException {
+        probeFailures++;
       }
     }
-    return null;
+
+    if (probeFailures > 0 && probeFailures == checked) {
+      return const LocalRaceResolveResult.failure(
+        '開催日の照会に失敗しました（通信エラー）。通信環境を確認して再取得してください',
+      );
+    }
+
+    return LocalRaceResolveResult.failure(
+      '第$round回・第$day日に一致する開催を特定できませんでした'
+      '（候補日 $checked 件を確認）',
+    );
+  }
+
+  static Future<List<T>> _mapLimited<T, A>(
+    List<A> items,
+    int concurrency,
+    Future<T> Function(A item) mapper,
+  ) async {
+    if (items.isEmpty) return [];
+    final results = List<T?>.filled(items.length, null);
+    var cursor = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final i = cursor++;
+        if (i >= items.length) return;
+        results[i] = await mapper(items[i]);
+      }
+    }
+
+    final workers = concurrency < items.length ? concurrency : items.length;
+    await Future.wait([for (var i = 0; i < workers; i++) worker()]);
+    return results.cast<T>();
   }
 
   static String buildUrl({
@@ -130,7 +231,6 @@ class LocalRaceUrlResolver {
 
   static int _estimatedStartIndex(int count, int round) {
     if (count <= 0) return 0;
-    // 回が進むほど年度後半の日付になる想定
     final ratio = ((round - 1).clamp(0, 40)) / 25.0;
     return (count * ratio).floor().clamp(0, count - 1);
   }
@@ -165,12 +265,11 @@ class LocalRaceUrlResolver {
           'k_month': '$month',
         },
       );
-      final response = await http.get(
-        uri,
-        headers: {'User-Agent': _userAgent},
-      );
+      final response = await HttpFetch.get(uri);
       if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
-        return {};
+        throw HttpFetchException(
+          '開催カレンダーの取得に失敗しました（HTTP ${response.statusCode}）',
+        );
       }
       bytes = response.bodyBytes;
       await cacheFile.parent.create(recursive: true);
@@ -203,7 +302,6 @@ class LocalRaceUrlResolver {
 
     final content = file.content as List<int>;
     final text = utf8.decode(content, allowMalformed: true);
-    // BOM除去
     final normalized =
         text.startsWith('\uFEFF') ? text.substring(1) : text;
 
@@ -225,7 +323,6 @@ class LocalRaceUrlResolver {
   static bool _venueMatches(String csvVenue, String ticketVenue) {
     if (csvVenue.isEmpty || ticketVenue.isEmpty) return false;
     if (csvVenue == ticketVenue) return true;
-    // 帯広ば ⟷ 帯広
     if (csvVenue.startsWith(ticketVenue)) return true;
     if (ticketVenue.startsWith(csvVenue)) return true;
     final stripped = csvVenue.replaceAll(RegExp(r'[ばバ]$'), '');
@@ -271,11 +368,12 @@ class LocalRaceUrlResolver {
       monthDay: yyyymmdd.substring(4, 8),
       race: 1,
     );
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {'User-Agent': _userAgent},
-    );
-    if (response.statusCode != 200) return null;
+    final response = await HttpFetch.get(Uri.parse(url));
+    if (response.statusCode != 200) {
+      throw HttpFetchException(
+        '開催日の照会に失敗しました（HTTP ${response.statusCode}）',
+      );
+    }
 
     final latin1 = String.fromCharCodes(response.bodyBytes);
     final match = _roundDayPattern.firstMatch(latin1);

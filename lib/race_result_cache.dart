@@ -51,7 +51,8 @@ class RaceResultCache {
   }
 
   static bool _isFresh(RaceResult result, DateTime cachedAt) {
-    if (result.hasResults) return true;
+    // 払戻確定済みのみ長期キャッシュ。未確定・レイアウト不明は短めに再取得。
+    if (result.hasResults && result.layoutRecognized) return true;
     return DateTime.now().toUtc().difference(cachedAt.toUtc()) < incompleteTtl;
   }
 

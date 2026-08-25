@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,70 +12,135 @@ class ScanHistoryService {
   static const _maxEntries = 100;
   static const _channel = MethodChannel('horceracing_ticket_qr_reader/storage');
 
-  static Future<List<ScanHistoryEntry>> load() async {
+  /// 同時書き込みを直列化する
+  static Future<void> _lock = Future.value();
+
+  /// テスト用に保存先を差し替える
+  static Directory? debugDirectory;
+
+  static Future<T> _synchronized<T>(Future<T> Function() action) {
+    final previous = _lock;
+    final gate = Completer<void>();
+    _lock = gate.future;
+    return previous.then((_) => action()).whenComplete(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+  }
+
+  static Future<List<ScanHistoryEntry>> load() {
+    return _synchronized(_loadUnlocked);
+  }
+
+  static Future<List<ScanHistoryEntry>> _loadUnlocked() async {
     final file = await _historyFile();
     if (!await file.exists()) return [];
 
-    final raw = await file.readAsString();
-    final list = jsonDecode(raw) as List;
-    return list
-        .map((e) => ScanHistoryEntry.fromJson(Map<String, dynamic>.from(e)))
-        .toList()
-      ..sort((a, b) => b.scannedAt.compareTo(a.scannedAt));
-  }
+    try {
+      final raw = await file.readAsString();
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        await _quarantineCorrupt(file);
+        return [];
+      }
 
-  static Future<String> add(Map<String, dynamic> data) async {
-    final entries = await load();
-    final id = DateTime.now().microsecondsSinceEpoch.toString();
+      final entries = <ScanHistoryEntry>[];
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        try {
+          entries.add(
+            ScanHistoryEntry.fromJson(Map<String, dynamic>.from(item)),
+          );
+        } catch (_) {
+          // 壊れた1件はスキップ
+        }
+      }
 
-    entries.insert(
-      0,
-      ScanHistoryEntry(
-        id: id,
-        scannedAt: DateTime.now(),
-        data: data,
-      ),
-    );
-
-    if (entries.length > _maxEntries) {
-      entries.removeRange(_maxEntries, entries.length);
+      entries.sort((a, b) => b.scannedAt.compareTo(a.scannedAt));
+      return entries;
+    } catch (_) {
+      await _quarantineCorrupt(file);
+      return [];
     }
-
-    await _writeEntries(entries);
-    return id;
   }
 
-  static Future<void> updateData(String id, Map<String, dynamic> patch) async {
-    if (patch.isEmpty) return;
-
-    final entries = await load();
-    final index = entries.indexWhere((e) => e.id == id);
-    if (index < 0) return;
-
-    final current = entries[index];
-    entries[index] = ScanHistoryEntry(
-      id: current.id,
-      scannedAt: current.scannedAt,
-      data: {...current.data, ...patch},
-    );
-    await _writeEntries(entries);
+  static Future<void> _quarantineCorrupt(File file) async {
+    try {
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      await file.rename('${file.path}.corrupt.$stamp');
+    } catch (_) {
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
   }
 
-  static Future<void> delete(String id) async {
-    final entries = await load()..removeWhere((e) => e.id == id);
-    await _writeEntries(entries);
+  static Future<String> add(Map<String, dynamic> data) {
+    return _synchronized(() async {
+      final entries = await _loadUnlocked();
+      final id = DateTime.now().microsecondsSinceEpoch.toString();
+
+      entries.insert(
+        0,
+        ScanHistoryEntry(
+          id: id,
+          scannedAt: DateTime.now(),
+          data: data,
+        ),
+      );
+
+      if (entries.length > _maxEntries) {
+        entries.removeRange(_maxEntries, entries.length);
+      }
+
+      await _writeEntriesUnlocked(entries);
+      return id;
+    });
   }
 
-  static Future<void> clear() async {
+  static Future<void> updateData(String id, Map<String, dynamic> patch) {
+    if (patch.isEmpty) return Future.value();
+
+    return _synchronized(() async {
+      final entries = await _loadUnlocked();
+      final index = entries.indexWhere((e) => e.id == id);
+      if (index < 0) return;
+
+      final current = entries[index];
+      entries[index] = ScanHistoryEntry(
+        id: current.id,
+        scannedAt: current.scannedAt,
+        data: {...current.data, ...patch},
+      );
+      await _writeEntriesUnlocked(entries);
+    });
+  }
+
+  static Future<void> delete(String id) {
+    return _synchronized(() async {
+      final entries = await _loadUnlocked()
+        ..removeWhere((e) => e.id == id);
+      await _writeEntriesUnlocked(entries);
+    });
+  }
+
+  static Future<void> clear() {
+    return _synchronized(() async {
+      final file = await _historyFile();
+      if (await file.exists()) {
+        await file.delete();
+      }
+    });
+  }
+
+  static Future<void> _writeEntriesUnlocked(List<ScanHistoryEntry> entries) async {
     final file = await _historyFile();
+    final tmp = File('${file.path}.tmp');
+    final payload = jsonEncode(entries.map((e) => e.toJson()).toList());
+    await tmp.writeAsString(payload, flush: true);
     if (await file.exists()) {
       await file.delete();
     }
-  }
-
-  static Future<void> _writeEntries(List<ScanHistoryEntry> entries) async {
-    final file = await _historyFile();
-    await file.writeAsString(jsonEncode(entries.map((e) => e.toJson()).toList()));
+    await tmp.rename(file.path);
   }
 
   static Future<File> _historyFile() async {
@@ -86,6 +152,8 @@ class ScanHistoryService {
   }
 
   static Future<Directory> _storageDirectory() async {
+    if (debugDirectory != null) return debugDirectory!;
+
     if (Platform.isAndroid) {
       final path = await _channel.invokeMethod<String>('getStorageDirectory');
       if (path == null || path.isEmpty) {

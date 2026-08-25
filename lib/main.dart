@@ -100,12 +100,46 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  void _showAbout() {
+    showAboutDialog(
+      context: context,
+      applicationName: '馬券QRリーダー',
+      applicationVersion: '0.5.0',
+      applicationLegalese: 'MIT License',
+      children: const [
+        SizedBox(height: 16),
+        Text(
+          '本アプリは非公式です。JRA・地方競馬・netkeiba 等との提携はありません。',
+        ),
+        SizedBox(height: 12),
+        Text(
+          '馬券QRの仕様は公開されていないため、読み取り結果が常に正しいとは限りません。',
+        ),
+        SizedBox(height: 12),
+        Text(
+          'レース結果・払戻の照合は netkeiba の公開ページを参照しています。'
+          '地方競馬の開催日特定には keiba.go.jp の月次データを利用します。'
+          'サイトの仕様変更により表示や的中判定が崩れることがあります。',
+        ),
+        SizedBox(height: 12),
+        Text(
+          '払戻や的中の最終確認は、必ず公式の窓口・サイトで行ってください。',
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('馬券QRリーダー'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'このアプリについて',
+            onPressed: _showAbout,
+          ),
           IconButton(
             icon: const Icon(Icons.history),
             tooltip: '履歴',
@@ -200,6 +234,12 @@ class _HomeEmptyState extends StatelessWidget {
             TextButton(
               onPressed: onPickImage,
               child: const Text('画像から読み取る'),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              '非公式アプリです。データ出典などの注意は右上の「このアプリについて」から確認できます。',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: muted, fontSize: 12, height: 1.4),
             ),
           ],
         ),

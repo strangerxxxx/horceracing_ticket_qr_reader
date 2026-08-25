@@ -51,6 +51,9 @@ class RaceResult {
   /// 開催年月日の表示用（例: 2025年5月4日）
   final String? raceDateLabel;
 
+  /// netkeiba の想定HTML構造を認識できたか（壊れたときの警告用）
+  final bool layoutRecognized;
+
   const RaceResult({
     required this.url,
     required this.payoutsByBetType,
@@ -60,6 +63,7 @@ class RaceResult {
     this.fieldSize,
     this.raceName,
     this.raceDateLabel,
+    this.layoutRecognized = true,
   });
 
   factory RaceResult.fromJson(Map<String, dynamic> json) {
@@ -75,11 +79,13 @@ class RaceResult {
 
     final namesRaw = json['horseNamesByNumber'] as Map? ?? {};
     final framesRaw = json['frameByHorseNumber'] as Map? ?? {};
+    final hasResults =
+        json['hasResults'] as bool? ?? payoutsByBetType.isNotEmpty;
 
     return RaceResult(
       url: json['url'] as String,
       payoutsByBetType: payoutsByBetType,
-      hasResults: json['hasResults'] as bool? ?? payoutsByBetType.isNotEmpty,
+      hasResults: hasResults,
       horseNamesByNumber: {
         for (final entry in namesRaw.entries)
           int.parse(entry.key.toString()): entry.value.toString(),
@@ -93,6 +99,11 @@ class RaceResult {
       fieldSize: json['fieldSize'] as int?,
       raceName: json['raceName'] as String?,
       raceDateLabel: json['raceDateLabel'] as String?,
+      layoutRecognized: json['layoutRecognized'] as bool? ??
+          (hasResults ||
+              namesRaw.isNotEmpty ||
+              json['raceName'] != null ||
+              json['raceDateLabel'] != null),
     );
   }
 
@@ -114,6 +125,7 @@ class RaceResult {
         'fieldSize': fieldSize,
         'raceName': raceName,
         'raceDateLabel': raceDateLabel,
+        'layoutRecognized': layoutRecognized,
       };
 
   List<PayoutEntry> payoutsFor(String betType) =>

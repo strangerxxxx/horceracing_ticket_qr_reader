@@ -4,6 +4,8 @@ import 'a11y_widgets.dart';
 import 'bet_type.dart';
 import 'external_url.dart';
 import 'frame_color.dart';
+import 'hit_colors.dart';
+import 'http_fetch.dart';
 import 'local_race_url.dart';
 import 'netkeiba_urls.dart';
 import 'race_result.dart';
@@ -144,7 +146,7 @@ class _TicketResultViewState extends State<TicketResultView> {
     });
 
     try {
-      final url = await LocalRaceUrlResolver.resolve(
+      final result = await LocalRaceUrlResolver.resolveDetailed(
         racecourseCode: code,
         venueName: venue,
         year: year,
@@ -154,19 +156,26 @@ class _TicketResultViewState extends State<TicketResultView> {
       );
       if (!mounted) return;
 
-      if (url == null) {
+      if (!result.isSuccess) {
         setState(() {
           _resolvingUrl = false;
-          _urlResolveError = '開催日を特定できませんでした';
+          _urlResolveError =
+              result.failureReason ?? '開催日を特定できませんでした';
         });
         return;
       }
 
       setState(() {
-        _resolvedUrl = url;
+        _resolvedUrl = result.url;
         _resolvingUrl = false;
       });
       await _loadRaceResult();
+    } on HttpFetchException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _resolvingUrl = false;
+        _urlResolveError = e.message;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -212,6 +221,12 @@ class _TicketResultViewState extends State<TicketResultView> {
         _loading = false;
       });
       await _persistRaceMeta(result);
+    } on HttpFetchException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.message;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -376,6 +391,13 @@ class _TicketResultViewState extends State<TicketResultView> {
                 ),
                 liveRegion: false,
               )
+            else if (!_raceResult!.layoutRecognized)
+              A11yStatusMessage(
+                'レース結果ページの形式を解釈できませんでした。'
+                'サイトの表示が変わった可能性があります。下のリンクから公式ページを確認し、'
+                '再取得を試してください。',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              )
             else if (!_raceResult!.hasResults)
               A11yStatusMessage(
                 'レース結果がまだ公開されていません',
@@ -427,7 +449,7 @@ class _TicketResultViewState extends State<TicketResultView> {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: hits > 0
-                  ? Colors.red.shade700
+                  ? HitColors.foreground(context)
                   : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
@@ -1080,8 +1102,8 @@ class _HitBadge extends StatelessWidget {
     final String label;
 
     if (result.hit) {
-      bg = Colors.red.shade50;
-      fg = Colors.red.shade800;
+      bg = HitColors.background(context);
+      fg = HitColors.onBackground(context);
       label = result.payoutYen > 0
           ? '的中  払戻 ${_formatYen(result.payoutYen)}'
           : '的中';
