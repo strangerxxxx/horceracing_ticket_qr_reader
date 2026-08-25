@@ -9,11 +9,20 @@ void main() {
 
     expect(find.text('馬券QRリーダー'), findsOneWidget);
     expect(find.text('QRコード読み取り'), findsOneWidget);
-    expect(find.text('続けて読む'), findsOneWidget);
+    expect(find.text('画像から読み取り'), findsOneWidget);
     expect(
       find.textContaining('馬券のQRコードは2枚あります'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('home scan buttons use the same elevated style', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp());
+
+    expect(find.byType(ElevatedButton), findsNWidgets(2));
+    expect(find.byType(OutlinedButton), findsNothing);
   });
 
   testWidgets('A11yLabeledRow exposes combined semantics label', (

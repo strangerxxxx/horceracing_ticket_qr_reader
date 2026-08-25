@@ -1,8 +1,10 @@
+import 'package:app_settings/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'a11y_widgets.dart';
 import 'history_page.dart';
+import 'image_ticket_reader.dart';
 import 'qr_scanner_page.dart';
 import 'scan_history_service.dart';
 import 'ticket_result_view.dart';
@@ -53,7 +55,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   Map<String, dynamic>? parsedResult;
   String? _currentHistoryId;
-  bool _continuousMode = false;
+  bool _readingImages = false;
 
   Future<void> _handleParsedTicket(Map<String, dynamic> result) async {
     if (result.containsKey('エラー')) {
@@ -72,17 +74,13 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  Future<void> _openQRScanner({bool openGalleryOnStart = false}) async {
+  Future<void> _openQRScanner() async {
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
         builder: (_) => QRScannerPage(
-          openGalleryOnStart: openGalleryOnStart,
-          continuousMode: _continuousMode,
-          onTicketParsed: _continuousMode
-              ? (data) {
-                  _handleParsedTicket(data);
-                }
-              : null,
+          onTicketParsed: (data) {
+            _handleParsedTicket(data);
+          },
         ),
       ),
     );
@@ -91,6 +89,91 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (result != null) {
       await _handleParsedTicket(result);
+    }
+  }
+
+  Future<void> _pickFromImages({required bool multiple}) async {
+    if (_readingImages) return;
+    setState(() => _readingImages = true);
+
+    try {
+      final picked = await ImageTicketReader.pickImages(multiple: multiple);
+      if (!mounted) return;
+
+      if (picked == null) {
+        await _showPhotoPermissionDeniedDialog();
+        return;
+      }
+      if (picked.isEmpty) return;
+
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const PopScope(
+          canPop: false,
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: A11yLoadingIndicator(message: '画像を解析しています…'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final outcome = await ImageTicketReader.parseImages(picked);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (outcome.ticket != null) {
+        await _handleParsedTicket(outcome.ticket!);
+        return;
+      }
+
+      if (outcome.message != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(outcome.message!)),
+        );
+      }
+    } catch (_) {
+      if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('画像の解析に失敗しました')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _readingImages = false);
+      }
+    }
+  }
+
+  Future<void> _showPhotoPermissionDeniedDialog() async {
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('写真へのアクセス'),
+        content: const Text(
+          '画像から読み取るには、設定で写真へのアクセスを許可してください。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('閉じる'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('設定を開く'),
+          ),
+        ],
+      ),
+    );
+    if (open == true) {
+      await AppSettings.openAppSettings();
     }
   }
 
@@ -157,10 +240,12 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: Semantics(
                     button: true,
                     label: 'QRコード読み取り',
-                    hint: '馬券のQRコードは2枚あります。カメラで両方を読み取ります',
-                    child: ElevatedButton(
-                      onPressed: () => _openQRScanner(),
-                      child: const Text('QRコード読み取り'),
+                    hint:
+                        'カメラで馬券のQRコード2枚を読み取ります。画面内で続けて読むに切り替えられます',
+                    child: ElevatedButton.icon(
+                      onPressed: _openQRScanner,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: const Text('QRコード読み取り'),
                     ),
                   ),
                 ),
@@ -169,23 +254,20 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: Semantics(
                     button: true,
                     label: '画像から読み取り',
-                    hint: '馬券のQRコードは2枚あります。2枚が写った画像、または1枚ずつ選んでください',
-                    child: OutlinedButton.icon(
-                      onPressed: () =>
-                          _openQRScanner(openGalleryOnStart: true),
+                    hint: 'タップで1枚、長押しで複数の画像を選べます',
+                    child: ElevatedButton.icon(
+                      onPressed: _readingImages
+                          ? null
+                          : () => _pickFromImages(multiple: false),
+                      onLongPress: _readingImages
+                          ? null
+                          : () => _pickFromImages(multiple: true),
                       icon: const Icon(Icons.photo_library_outlined),
                       label: const Text('画像から読み取り'),
                     ),
                   ),
                 ),
               ],
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('続けて読む'),
-              subtitle: const Text('読み取り後もスキャナを閉じず、次の馬券を続けて読めます'),
-              value: _continuousMode,
-              onChanged: (value) => setState(() => _continuousMode = value),
             ),
             const SizedBox(height: 8),
             Expanded(
@@ -197,12 +279,13 @@ class _MyHomePageState extends State<MyHomePage> {
                         onDataUpdated: (updated) {
                           setState(() => parsedResult = updated);
                         },
-                        onRescan: () => _openQRScanner(),
+                        onRescan: _openQRScanner,
                       )
                     : _HomeEmptyState(
-                        onScan: () => _openQRScanner(),
-                        onPickImage: () =>
-                            _openQRScanner(openGalleryOnStart: true),
+                        onScan: _openQRScanner,
+                        onPickImage: () => _pickFromImages(multiple: false),
+                        onPickImagesMulti: () =>
+                            _pickFromImages(multiple: true),
                       ),
               ),
             ),
@@ -216,10 +299,12 @@ class _MyHomePageState extends State<MyHomePage> {
 class _HomeEmptyState extends StatelessWidget {
   final VoidCallback onScan;
   final VoidCallback onPickImage;
+  final VoidCallback onPickImagesMulti;
 
   const _HomeEmptyState({
     required this.onScan,
     required this.onPickImage,
+    required this.onPickImagesMulti,
   });
 
   @override
@@ -233,7 +318,7 @@ class _HomeEmptyState extends StatelessWidget {
           children: [
             A11yStatusMessage(
               '馬券のQRコードは2枚あります。両方をカメラでかざすか、'
-              '2枚が写った画像を選んでください。',
+              '2枚が写った画像を選んでください。長押しで複数画像も選べます。',
               style: TextStyle(color: muted, height: 1.5),
               liveRegion: true,
             ),
@@ -250,9 +335,10 @@ class _HomeEmptyState extends StatelessWidget {
             Semantics(
               button: true,
               label: '画像から読み取る',
-              hint: '馬券のQRコード2枚が写った画像を選びます',
+              hint: 'タップで1枚、長押しで複数の画像を選びます',
               child: TextButton(
                 onPressed: onPickImage,
+                onLongPress: onPickImagesMulti,
                 child: const Text('画像から読み取る'),
               ),
             ),

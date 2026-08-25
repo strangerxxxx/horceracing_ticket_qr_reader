@@ -7,24 +7,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'a11y_widgets.dart';
-import 'parse.dart';
-import 'parse_local.dart';
-import 'ticket.dart';
+import 'ticket_qr_parse.dart';
 
 class QRScannerPage extends StatefulWidget {
-  /// true の場合、画面表示後にギャラリー選択を開く
-  final bool openGalleryOnStart;
-
-  /// true の場合、読み取り成功後も画面を閉じず次の馬券を受け付ける
-  final bool continuousMode;
-
   /// 続けて読むモードで解析成功したときに呼ばれる
   final ValueChanged<Map<String, dynamic>>? onTicketParsed;
 
   const QRScannerPage({
     super.key,
-    this.openGalleryOnStart = false,
-    this.continuousMode = false,
     this.onTicketParsed,
   });
 
@@ -36,6 +26,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
   final List<String> _qrResults = [];
   bool _processed = false;
   bool _analyzingImage = false;
+  bool _continuousMode = false;
 
   /// 続けて読む成功直後の再検出抑制
   DateTime? _scanPausedUntil;
@@ -63,9 +54,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
         _guideText,
         TextDirection.ltr,
       );
-      if (widget.openGalleryOnStart) {
-        _pickAndAnalyzeImage();
-      }
     });
   }
 
@@ -73,11 +61,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
   void dispose() {
     _controller.dispose();
     super.dispose();
-  }
-
-  int _countSequence(String s) {
-    const sequence = '0123456789';
-    return RegExp(sequence).allMatches(s).length;
   }
 
   void _resetScan() {
@@ -92,6 +75,15 @@ class _QRScannerPageState extends State<QRScannerPage> {
     _blockedQrs.clear();
     _scanPausedUntil = null;
     _resetScan();
+  }
+
+  void _toggleContinuousMode() {
+    setState(() => _continuousMode = !_continuousMode);
+    _showMessage(
+      _continuousMode
+          ? '続けて読むモードにしました'
+          : '1枚読み取りモードにしました',
+    );
   }
 
   Future<void> _toggleTorch() async {
@@ -151,7 +143,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
     }
   }
 
-  Future<void> _pickAndAnalyzeImage() async {
+  Future<void> _pickAndAnalyzeImage({bool multiple = false}) async {
     if (_processed || _analyzingImage) return;
 
     if (kIsWeb) {
@@ -160,9 +152,14 @@ class _QRScannerPageState extends State<QRScannerPage> {
     }
 
     final picker = ImagePicker();
-    XFile? image;
+    late final List<XFile> images;
     try {
-      image = await picker.pickImage(source: ImageSource.gallery);
+      if (multiple) {
+        images = await picker.pickMultiImage();
+      } else {
+        final one = await picker.pickImage(source: ImageSource.gallery);
+        images = one == null ? const [] : [one];
+      }
     } on PlatformException catch (e) {
       if (_isPermissionDenied(e)) {
         await _showPermissionDeniedDialog(forPhotos: true);
@@ -172,7 +169,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
       return;
     }
 
-    if (image == null || !mounted) return;
+    if (images.isEmpty || !mounted) return;
 
     // 画像選択は明示操作なので、直前馬券のブロックは解除する
     _blockedQrs.clear();
@@ -181,22 +178,27 @@ class _QRScannerPageState extends State<QRScannerPage> {
     setState(() => _analyzingImage = true);
 
     try {
-      final capture = await _controller.analyzeImage(
-        image.path,
-        formats: const [BarcodeFormat.qrCode],
-      );
+      var anyBarcode = false;
+      final before = _qrResults.length;
 
-      if (!mounted) return;
+      for (final image in images) {
+        if (_processed) break;
+        final capture = await _controller.analyzeImage(
+          image.path,
+          formats: const [BarcodeFormat.qrCode],
+        );
+        if (!mounted) return;
+        if (capture == null || capture.barcodes.isEmpty) continue;
+        anyBarcode = true;
+        _ingestBarcodes(capture);
+      }
 
-      if (capture == null || capture.barcodes.isEmpty) {
+      if (_processed) return;
+
+      if (!anyBarcode) {
         _showMessage('画像からQRコードを検出できませんでした');
         return;
       }
-
-      final before = _qrResults.length;
-      _ingestBarcodes(capture);
-
-      if (_processed) return;
 
       final added = _qrResults.length - before;
       if (added == 0) {
@@ -267,43 +269,18 @@ class _QRScannerPageState extends State<QRScannerPage> {
   }
 
   Future<void> _processTwoQRs(String first, String second) async {
-    final int count1 = _countSequence(first);
-    final int count2 = _countSequence(second);
-
-    final String preferred;
-    final String alt;
-    if (count1 > count2) {
-      preferred = second + first;
-      alt = first + second;
-    } else {
-      preferred = first + second;
-      alt = second + first;
-    }
-
-    Map<String, dynamic>? parsedData;
-
-    try {
-      debugPrint('Parse (preferred): $preferred');
-      parsedData = _parse(preferred);
-    } catch (_) {
-      try {
-        debugPrint('Parse (alt): $alt');
-        parsedData = _parse(alt);
-      } catch (e) {
-        debugPrint('Read 1: $first');
-        debugPrint('Read 2: $second');
-        debugPrint('Parse error: $e');
-      }
-    }
+    final parsedData = parseTicketFromTwoQrs(first, second);
 
     if (!mounted) return;
 
     if (parsedData == null) {
+      debugPrint('Read 1: $first');
+      debugPrint('Read 2: $second');
       await _showParseErrorDialog();
       return;
     }
 
-    if (widget.continuousMode) {
+    if (_continuousMode) {
       widget.onTicketParsed?.call(parsedData);
       _blockedQrs
         ..clear()
@@ -349,13 +326,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
     }
   }
 
-  Map<String, dynamic> _parse(String s) {
-    final raw = s.substring(3, 4) == '1'
-        ? parseHorseracingTicketQrLocal(s)
-        : parseHorseracingTicketQr(s);
-    return Ticket.fromMap(raw).toMap();
-  }
-
   Widget _buildCameraError(BuildContext context, MobileScannerException error) {
     final denied = error.errorCode == MobileScannerErrorCode.permissionDenied;
     final message = denied
@@ -395,7 +365,12 @@ class _QRScannerPageState extends State<QRScannerPage> {
                 ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
-                onPressed: _analyzingImage ? null : _pickAndAnalyzeImage,
+                onPressed: _analyzingImage
+                    ? null
+                    : () => _pickAndAnalyzeImage(),
+                onLongPress: _analyzingImage
+                    ? null
+                    : () => _pickAndAnalyzeImage(multiple: true),
                 icon: const Icon(Icons.photo_library_outlined),
                 label: const Text('画像から読み取り'),
                 style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
@@ -432,8 +407,21 @@ class _QRScannerPageState extends State<QRScannerPage> {
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white),
                   ),
+                  const SizedBox(height: 8),
+                  FilterChip(
+                    label: Text(
+                      _continuousMode ? '続けて読む: オン' : '続けて読む',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    selected: _continuousMode,
+                    onSelected: (_) => _toggleContinuousMode(),
+                    checkmarkColor: Colors.white,
+                    selectedColor: Colors.green.shade700,
+                    backgroundColor: Colors.white24,
+                    side: const BorderSide(color: Colors.white54),
+                  ),
                   if (_qrResults.isNotEmpty) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     TextButton.icon(
                       onPressed: _resetScanForUser,
                       icon: const Icon(Icons.refresh, color: Colors.white),
@@ -454,7 +442,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pageLabel = widget.continuousMode
+    final pageLabel = _continuousMode
         ? '続けて読み取り。$_guideText'
         : 'QRコードを読み取る。$_guideText';
 
@@ -464,8 +452,17 @@ class _QRScannerPageState extends State<QRScannerPage> {
       explicitChildNodes: true,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.continuousMode ? '続けて読み取り' : 'QRコードを読み取る'),
+          title: Text(_continuousMode ? '続けて読み取り' : 'QRコードを読み取る'),
           actions: [
+            IconButton(
+              tooltip: _continuousMode
+                  ? '続けて読むをオフ'
+                  : '続けて読むをオン',
+              isSelected: _continuousMode,
+              onPressed: _toggleContinuousMode,
+              icon: const Icon(Icons.library_add_check_outlined),
+              selectedIcon: const Icon(Icons.library_add_check),
+            ),
             ValueListenableBuilder(
               valueListenable: _controller,
               builder: (context, state, _) {
@@ -487,8 +484,13 @@ class _QRScannerPageState extends State<QRScannerPage> {
               icon: const Icon(Icons.refresh),
             ),
             IconButton(
-              tooltip: '画像から読み取り',
-              onPressed: _analyzingImage ? null : _pickAndAnalyzeImage,
+              tooltip: '画像から読み取り（長押しで複数選択）',
+              onPressed: _analyzingImage
+                  ? null
+                  : () => _pickAndAnalyzeImage(),
+              onLongPress: _analyzingImage
+                  ? null
+                  : () => _pickAndAnalyzeImage(multiple: true),
               icon: const Icon(Icons.photo_library_outlined),
             ),
           ],
