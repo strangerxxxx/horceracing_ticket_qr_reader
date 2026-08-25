@@ -5,6 +5,27 @@ import 'package:horceracing_ticket_qr_reader/ticket_payout_checker.dart';
 void main() {
   const sampleHtml = '''
 <html><body>
+<table class="race_table_01 nk_tb_common">
+<tr><th>着</th><th>枠</th><th>馬番</th><th>馬名</th></tr>
+<tr>
+<td class="txt_r">1</td>
+<td class="w2ml"><span>2</span></td>
+<td class="txt_r">12</td>
+<td class="txt_l"><a href="/horse/2022100001/" title="テストホース">テストホース</a></td>
+</tr>
+<tr>
+<td class="txt_r">2</td>
+<td class="w1ml"><span>1</span></td>
+<td class="txt_r">2</td>
+<td class="txt_l"><a href="/horse/2022100002/">サンプルウマ</a></td>
+</tr>
+<tr>
+<td class="txt_r">3</td>
+<td class="w3ml"><span>3</span></td>
+<td class="txt_r">1</td>
+<td class="txt_l"><a href="/horse/2022100003/">ダミーバ</a></td>
+</tr>
+</table>
 <dl class="pay_block">
 <table class="pay_table_01" summary="払い戻し">
 <tr>
@@ -65,6 +86,18 @@ void main() {
     expect(result.payoutsFor('三連単').single.combinationLabel, '12 → 2 → 1');
     expect(result.payoutsFor('馬連').single.combinationLabel, '2 - 12');
     expect(result.payoutsFor('三連複').single.combinationKey, '1-2-12');
+  });
+
+  test('parseHtml extracts horse names from race table', () {
+    final result = RaceResultFetcher.parseHtml(
+      sampleHtml,
+      'https://db.netkeiba.com/race/202505020411',
+    );
+
+    expect(result.horseNamesByNumber[12], 'テストホース');
+    expect(result.horseNamesByNumber[2], 'サンプルウマ');
+    expect(result.horseNamesByNumber[1], 'ダミーバ');
+    expect(result.horseName(12), 'テストホース');
   });
 
   test('checkPurchase detects win and loss', () {
