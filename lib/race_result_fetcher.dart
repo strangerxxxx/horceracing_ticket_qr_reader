@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 
+import 'bet_type.dart';
 import 'race_result.dart';
 
 /// netkeiba のレース結果ページから払戻を取得する
@@ -7,16 +8,17 @@ class RaceResultFetcher {
   static const _userAgent =
       'Mozilla/5.0 (compatible; HorseRacingTicketQrReader/1.0)';
 
-  /// th の class → 式別名
+  /// th の class → 式別名（netkeiba 表記）
   static const _betTypeByClass = {
     'tan': '単勝',
     'fuku': '複勝',
     'waku': '枠連',
+    'wakutan': '枠単',
     'uren': '馬連',
     'wide': 'ワイド',
     'utan': '馬単',
-    'sanfuku': '3連複',
-    'santan': '3連単',
+    'sanfuku': '三連複',
+    'santan': '三連単',
   };
 
   static Future<RaceResult> fetch(String url) async {
@@ -104,7 +106,7 @@ class RaceResultFetcher {
         .toList();
     if (numbers.isEmpty) return '';
 
-    final ordered = betType == '馬単' || betType == '3連単' || betType == '馬番連単';
+    final ordered = isOrderedBetType(betType);
     if (ordered) {
       return numbers.join('>');
     }
@@ -124,7 +126,7 @@ class RaceResultFetcher {
 
   /// 照合キーから表示用ラベルを作る（文字化けしない区切り文字を使う）
   static String formatCombinationLabel(String key, String betType) {
-    final ordered = betType == '馬単' || betType == '3連単' || betType == '馬番連単';
+    final ordered = isOrderedBetType(betType);
     if (ordered) {
       return key.split('>').join(' → ');
     }

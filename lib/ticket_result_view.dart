@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'bet_type.dart';
 import 'external_url.dart';
 import 'local_race_url.dart';
 import 'race_result.dart';
@@ -380,7 +381,7 @@ class _TicketResultViewState extends State<TicketResultView> {
   }
 
   Widget _buildBetTypePayouts(BuildContext context, String betType) {
-    final payouts = _raceResult!.payoutsFor(_normalizeBetType(betType));
+    final payouts = _raceResult!.payoutsFor(normalizeBetType(betType));
     if (payouts.isEmpty) {
       return _InfoRow(label: betType, value: '払戻なし');
     }
@@ -420,9 +421,6 @@ class _TicketResultViewState extends State<TicketResultView> {
     }
     return types;
   }
-
-  static String _normalizeBetType(String betType) =>
-      betType == '馬番連単' ? '馬単' : betType;
 
   List<Widget> _raceInfoRows(BuildContext context) {
     final rows = <Widget>[];

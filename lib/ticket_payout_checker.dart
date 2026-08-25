@@ -1,3 +1,4 @@
+import 'bet_type.dart';
 import 'race_result.dart';
 import 'race_result_fetcher.dart';
 
@@ -48,8 +49,8 @@ class TicketPayoutChecker {
       return PurchaseCheckResult.unavailable('式別が不明です');
     }
 
-    // 地方競馬の「馬番連単」は馬単と同じ扱い
-    final normalizedBetType = betType == '馬番連単' ? '馬単' : betType;
+    // 地方競馬の券面式別名を netkeiba 表記に揃える
+    final normalizedBetType = normalizeBetType(betType);
     final payouts = raceResult.payoutsFor(normalizedBetType);
     if (payouts.isEmpty) {
       return PurchaseCheckResult.unavailable('$betType の払戻が見つかりません');
@@ -103,8 +104,7 @@ class TicketPayoutChecker {
     Map purchase,
   ) {
     final unitAmount = _asInt(purchase['購入金額']) ?? 0;
-    final betTypeRaw = purchase['式別']?.toString() ?? '';
-    final betType = betTypeRaw == '馬番連単' ? '馬単' : betTypeRaw;
+    final betType = normalizeBetType(purchase['式別']?.toString() ?? '');
     final ticketType = ticketData['券種']?.toString() ?? '通常';
     final multi = ticketData['マルチ']?.toString() == 'あり';
 
@@ -161,8 +161,9 @@ class TicketPayoutChecker {
     required Map purchase,
     required bool multi,
   }) {
-    final ordered = betType == '馬単' || betType == '3連単';
-    final size = _combinationSize(betType);
+    final normalizedBetType = normalizeBetType(betType);
+    final ordered = isOrderedBetType(normalizedBetType);
+    final size = _combinationSize(normalizedBetType);
     if (size == null) return {};
 
     switch (ticketType) {
@@ -171,11 +172,11 @@ class TicketPayoutChecker {
       case 'フォーメーション':
         return _expandFormation(_asIntListList(purchase['馬番']), size, ordered);
       case 'ながし':
-        return _expandNagashi(purchase, betType, multi);
+        return _expandNagashi(purchase, normalizedBetType, multi);
       case 'クイックピック':
         return _expandQuickPick(_asIntListList(purchase['馬番']), size, ordered);
       default:
-        return _expandNormal(purchase, betType, size, ordered);
+        return _expandNormal(purchase, normalizedBetType, size, ordered);
     }
   }
 
@@ -293,6 +294,7 @@ class TicketPayoutChecker {
       case '枠連':
         return _expandAxisOneNagashi(axis, partners, ordered: false);
       case '馬単':
+      case '枠単':
         if (nagashi.contains('1着')) {
           return _expandAxisOneNagashi(
             axis,
@@ -315,13 +317,13 @@ class TicketPayoutChecker {
           ordered: true,
           axisFirst: true,
         );
-      case '3連複':
+      case '三連複':
         if (nagashi.contains('軸2頭')) {
           final axes = _asIntList(axis);
           return _expandTrioAxisTwo(axes, partners);
         }
         return _expandTrioAxisOne(axis, partners);
-      case '3連単':
+      case '三連単':
         return _expandTrifectaNagashi(nagashi, horses, multi);
       default:
         return {};
@@ -403,12 +405,13 @@ class TicketPayoutChecker {
       case '複勝':
         return 1;
       case '枠連':
+      case '枠単':
       case '馬連':
       case '馬単':
       case 'ワイド':
         return 2;
-      case '3連複':
-      case '3連単':
+      case '三連複':
+      case '三連単':
         return 3;
       default:
         return null;

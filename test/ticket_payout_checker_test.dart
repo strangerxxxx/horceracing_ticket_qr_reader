@@ -61,9 +61,10 @@ void main() {
     expect(result.payoutsFor('馬連').single.combinationKey, '2-12');
     expect(result.payoutsFor('馬単').single.combinationKey, '12>2');
     expect(result.payoutsFor('馬単').single.combinationLabel, '12 → 2');
-    expect(result.payoutsFor('3連単').single.combinationKey, '12>2>1');
-    expect(result.payoutsFor('3連単').single.combinationLabel, '12 → 2 → 1');
+    expect(result.payoutsFor('三連単').single.combinationKey, '12>2>1');
+    expect(result.payoutsFor('三連単').single.combinationLabel, '12 → 2 → 1');
     expect(result.payoutsFor('馬連').single.combinationLabel, '2 - 12');
+    expect(result.payoutsFor('三連複').single.combinationKey, '1-2-12');
   });
 
   test('checkPurchase detects win and loss', () {
