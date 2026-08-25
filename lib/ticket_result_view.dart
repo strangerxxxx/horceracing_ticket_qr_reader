@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import 'external_url.dart';
 import 'race_result.dart';
 import 'race_result_fetcher.dart';
 import 'ticket_payout_checker.dart';
@@ -640,10 +640,7 @@ class _UrlRow extends StatelessWidget {
           ),
           Expanded(
             child: InkWell(
-              onTap: () => launchUrl(
-                Uri.parse(url),
-                mode: LaunchMode.externalApplication,
-              ),
+              onTap: () => openExternalUrl(url),
               child: Text(
                 url,
                 style: TextStyle(
