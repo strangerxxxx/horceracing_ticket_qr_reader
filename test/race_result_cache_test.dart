@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -81,5 +82,38 @@ void main() {
     await files.first.writeAsString('not-json');
 
     expect(await RaceResultCache.read(url), isNull);
+  });
+
+  test('unrecognized layout is not kept forever', () async {
+    final result = RaceResult(
+      url: 'https://example.com/broken',
+      payoutsByBetType: const {},
+      hasResults: false,
+      layoutRecognized: false,
+    );
+    await RaceResultCache.write(result.url, result);
+    final files = tempDir.listSync().whereType<File>().toList();
+    expect(files, isNotEmpty);
+
+    final old = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+    await files.first.writeAsString(
+      jsonEncode({
+        'cachedAt': old.toIso8601String(),
+        'result': result.toJson(),
+      }),
+    );
+
+    expect(await RaceResultCache.read(result.url), isNull);
+  });
+
+  test('layoutRecognized survives JSON round-trip', () {
+    final original = const RaceResult(
+      url: 'https://example.com/r',
+      payoutsByBetType: {},
+      hasResults: false,
+      layoutRecognized: false,
+    );
+    final restored = RaceResult.fromJson(original.toJson());
+    expect(restored.layoutRecognized, isFalse);
   });
 }

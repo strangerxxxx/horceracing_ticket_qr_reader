@@ -1,3 +1,6 @@
+@Tags(['live'])
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:horceracing_ticket_qr_reader/local_race_url.dart';
 

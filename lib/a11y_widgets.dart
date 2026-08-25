@@ -125,6 +125,7 @@ class A11yLabeledRow extends StatelessWidget {
   final String label;
   final String? value;
   final Widget? valueWidget;
+  final String? semanticValue;
   final double labelWidth;
 
   const A11yLabeledRow({
@@ -132,6 +133,7 @@ class A11yLabeledRow extends StatelessWidget {
     required this.label,
     this.value,
     this.valueWidget,
+    this.semanticValue,
     this.labelWidth = 80,
   }) : assert(value != null || valueWidget != null);
 
@@ -143,15 +145,25 @@ class A11yLabeledRow extends StatelessWidget {
     final valueStyle = const TextStyle(fontWeight: FontWeight.w500);
 
     if (valueWidget != null) {
+      final summary = semanticValue;
       return Semantics(
-        label: label,
+        label: summary == null || summary.isEmpty
+            ? label
+            : '$label、$summary',
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(width: labelWidth, child: Text(label, style: labelStyle)),
-              Expanded(child: valueWidget!),
+              SizedBox(
+                width: labelWidth,
+                child: ExcludeSemantics(child: Text(label, style: labelStyle)),
+              ),
+              Expanded(
+                child: summary == null || summary.isEmpty
+                    ? valueWidget!
+                    : ExcludeSemantics(child: valueWidget!),
+              ),
             ],
           ),
         ),

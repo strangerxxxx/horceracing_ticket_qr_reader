@@ -11,6 +11,7 @@ import 'netkeiba_urls.dart';
 import 'race_result.dart';
 import 'race_result_fetcher.dart';
 import 'scan_history_service.dart';
+import 'ticket.dart';
 import 'ticket_payout_checker.dart';
 
 /// 金額を3桁カンマ区切りで表示する
@@ -64,19 +65,21 @@ class _TicketResultViewState extends State<TicketResultView> {
 
   Map<String, dynamic> get data => widget.data;
 
+  Ticket get ticket => Ticket.fromMap(data);
+
   String? get _effectiveUrl =>
-      _resolvedUrl ?? data['URL']?.toString();
+      _resolvedUrl ?? ticket.resultUrl;
 
   bool get _canFetchRaceMeta {
-    if (data.containsKey('エラー')) return false;
-    if (data['URL'] != null) return true;
+    if (ticket.hasError) return false;
+    if (ticket.resultUrl != null) return true;
 
-    return data['場コード']?.toString() != null &&
-        data['開催場']?.toString() != null &&
-        _asInt(data['年']) != null &&
-        _asInt(data['回']) != null &&
-        _asInt(data['日']) != null &&
-        _asInt(data['レース']) != null;
+    return ticket.venueCode != null &&
+        ticket.venueName != null &&
+        ticket.year != null &&
+        ticket.round != null &&
+        ticket.day != null &&
+        ticket.raceNumber != null;
   }
 
   bool get _isFetchingRaceMeta => _loading || _resolvingUrl;
@@ -113,9 +116,9 @@ class _TicketResultViewState extends State<TicketResultView> {
   }
 
   Future<void> _bootstrap() async {
-    if (data.containsKey('エラー')) return;
+    if (ticket.hasError) return;
 
-    if (data['URL'] != null) {
+    if (ticket.resultUrl != null) {
       await _loadRaceResult();
       return;
     }
@@ -124,12 +127,12 @@ class _TicketResultViewState extends State<TicketResultView> {
   }
 
   Future<void> _resolveLocalUrlIfNeeded() async {
-    final code = data['場コード']?.toString();
-    final venue = data['開催場']?.toString();
-    final year = _asInt(data['年']);
-    final round = _asInt(data['回']);
-    final day = _asInt(data['日']);
-    final race = _asInt(data['レース']);
+    final code = ticket.venueCode;
+    final venue = ticket.venueName;
+    final year = ticket.year;
+    final round = ticket.round;
+    final day = ticket.day;
+    final race = ticket.raceNumber;
 
     if (code == null ||
         venue == null ||
@@ -201,18 +204,12 @@ class _TicketResultViewState extends State<TicketResultView> {
       );
       if (!mounted) return;
 
-      final purchases = data['購入内容'];
+      final purchases = ticket.purchases;
       final checks = <PurchaseCheckResult?>[];
-      if (purchases is List) {
-        for (final item in purchases) {
-          if (item is Map) {
-            checks.add(
-              TicketPayoutChecker.checkPurchase(data, item, result),
-            );
-          } else {
-            checks.add(null);
-          }
-        }
+      for (final item in purchases) {
+        checks.add(
+          TicketPayoutChecker.checkPurchase(ticket, item, result),
+        );
       }
 
       setState(() {
@@ -266,7 +263,7 @@ class _TicketResultViewState extends State<TicketResultView> {
 
   @override
   Widget build(BuildContext context) {
-    if (data.containsKey('エラー')) {
+    if (ticket.hasError) {
       return _buildError(context);
     }
 
@@ -293,8 +290,8 @@ class _TicketResultViewState extends State<TicketResultView> {
   }
 
   Widget _buildError(BuildContext context) {
-    final message = data['エラー'].toString();
-    final detail = data['詳細']?.toString();
+    final message = ticket.error ?? 'エラー';
+    final detail = ticket.errorDetail;
     return Semantics(
       liveRegion: true,
       label: detail == null ? message : '$message。$detail',
@@ -421,7 +418,7 @@ class _TicketResultViewState extends State<TicketResultView> {
     final valid = _checkResults.whereType<PurchaseCheckResult>().toList();
     final hits = valid.where((r) => r.hit).length;
     final totalPayout = valid.fold<int>(0, (sum, r) => sum + r.payoutYen);
-    final stake = TicketPayoutChecker.summarizeTicket(data);
+    final stake = TicketPayoutChecker.summarizeTicket(ticket);
     final labelStyle = TextStyle(
       color: Theme.of(context).colorScheme.onSurfaceVariant,
     );
@@ -615,13 +612,9 @@ class _TicketResultViewState extends State<TicketResultView> {
   }
 
   List<String> _purchasedBetTypes() {
-    final purchases = data['購入内容'];
-    if (purchases is! List) return [];
-
     final types = <String>[];
-    for (final item in purchases) {
-      if (item is! Map) continue;
-      final betType = item['式別']?.toString();
+    for (final item in ticket.purchases) {
+      final betType = item.betType;
       if (betType == null || betType.isEmpty) continue;
       if (!types.contains(betType)) {
         types.add(betType);
@@ -712,12 +705,12 @@ class _TicketResultViewState extends State<TicketResultView> {
   }
 
   Widget _buildPurchaseSection(BuildContext context) {
-    final purchases = data['購入内容'];
-    if (purchases is! List || purchases.isEmpty) {
+    final purchases = ticket.purchases;
+    if (purchases.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final stake = TicketPayoutChecker.summarizeTicket(data);
+    final stake = TicketPayoutChecker.summarizeTicket(ticket);
 
     return Card(
       child: Padding(
@@ -736,7 +729,7 @@ class _TicketResultViewState extends State<TicketResultView> {
               if (i > 0) const SizedBox(height: 12),
               _buildPurchaseItem(
                 context,
-                purchases[i],
+                purchases[i].toMap(),
                 i < _checkResults.length ? _checkResults[i] : null,
                 i < stake.purchases.length ? stake.purchases[i] : null,
               ),
@@ -775,14 +768,24 @@ class _TicketResultViewState extends State<TicketResultView> {
     addField('ながし', item['ながし']);
 
     final betType = item['式別']?.toString() ?? '';
-    final ticketType = data['券種']?.toString() ?? '';
+    final ticketType = ticket.ticketType ?? '';
+    final numberIsFrame = _isFrameBet(betType);
+    final purchaseItem = PurchaseItem.fromMap(Map<String, dynamic>.from(item));
     final horsesWidget = _buildPurchaseHorses(
       item,
       betType: betType,
       ticketType: ticketType,
     );
     if (horsesWidget != null) {
-      rows.add(_InfoRow.widget(label: '馬番', child: horsesWidget));
+      rows.add(
+        _InfoRow.widget(
+          label: '馬番',
+          semanticValue: purchaseItem.semanticNumbersDescription(
+            numberIsFrame: numberIsFrame,
+          ),
+          child: horsesWidget,
+        ),
+      );
     }
     addField('ウラ', item['ウラ']);
 
@@ -1159,12 +1162,17 @@ class _InfoRow extends StatelessWidget {
   final String label;
   final String? value;
   final Widget? valueWidget;
+  final String? semanticValue;
 
   const _InfoRow({required this.label, required this.value})
-      : valueWidget = null;
+      : valueWidget = null,
+        semanticValue = null;
 
-  const _InfoRow.widget({required this.label, required Widget child})
-      : value = null,
+  const _InfoRow.widget({
+    required this.label,
+    required Widget child,
+    this.semanticValue,
+  })  : value = null,
         valueWidget = child;
 
   @override
@@ -1173,6 +1181,7 @@ class _InfoRow extends StatelessWidget {
       label: label,
       value: value,
       valueWidget: valueWidget,
+      semanticValue: semanticValue,
     );
   }
 }

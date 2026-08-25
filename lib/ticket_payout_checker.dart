@@ -1,6 +1,7 @@
 import 'bet_type.dart';
 import 'race_result.dart';
 import 'race_result_fetcher.dart';
+import 'ticket.dart';
 
 /// 購入内容1件分の点数・金額サマリー
 class PurchaseStakeSummary {
@@ -35,38 +36,40 @@ class TicketStakeSummary {
 
 /// 購入内容とレース払戻を照合する
 class TicketPayoutChecker {
+  /// [ticketData] / [purchase] は [Ticket]/[PurchaseItem] または従来の Map
   static PurchaseCheckResult checkPurchase(
-    Map ticketData,
-    Map purchase,
+    dynamic ticketData,
+    dynamic purchase,
     RaceResult raceResult,
   ) {
+    final ticket = _asTicket(ticketData);
+    final item = _asPurchase(purchase);
     if (!raceResult.hasResults) {
       return PurchaseCheckResult.unavailable('レース結果がまだ公開されていません');
     }
 
-    final betType = purchase['式別']?.toString();
+    final betType = item.betType;
     if (betType == null || betType.isEmpty) {
       return PurchaseCheckResult.unavailable('式別が不明です');
     }
 
-    // 地方競馬の券面式別名を netkeiba 表記に揃える
     final normalizedBetType = normalizeBetType(betType);
     final payouts = raceResult.payoutsFor(normalizedBetType);
     if (payouts.isEmpty) {
       return PurchaseCheckResult.unavailable('$betType の払戻が見つかりません');
     }
 
-    final amount = _asInt(purchase['購入金額']) ?? 0;
+    final amount = item.amountYen ?? 0;
     if (amount <= 0) {
       return PurchaseCheckResult.unavailable('購入金額が不明です');
     }
 
-    final ticketType = ticketData['券種']?.toString() ?? '通常';
-    final multi = ticketData['マルチ']?.toString() == 'あり';
+    final ticketType = ticket.ticketType ?? '通常';
+    final multi = ticket.multi == true;
     final combinations = expandCombinations(
       ticketType: ticketType,
       betType: normalizedBetType,
-      purchase: purchase,
+      purchase: item.toMap(),
       multi: multi,
     );
 
@@ -100,23 +103,24 @@ class TicketPayoutChecker {
 
   /// 購入内容1件の点数・合計金額を計算する
   static PurchaseStakeSummary summarizePurchase(
-    Map ticketData,
-    Map purchase,
+    dynamic ticketData,
+    dynamic purchase,
   ) {
-    final unitAmount = _asInt(purchase['購入金額']) ?? 0;
-    final betType = normalizeBetType(purchase['式別']?.toString() ?? '');
-    final ticketType = ticketData['券種']?.toString() ?? '通常';
-    final multi = ticketData['マルチ']?.toString() == 'あり';
+    final ticket = _asTicket(ticketData);
+    final item = _asPurchase(purchase);
+    final unitAmount = item.amountYen ?? 0;
+    final betType = normalizeBetType(item.betType ?? '');
+    final ticketType = ticket.ticketType ?? '通常';
+    final multi = ticket.multi == true;
 
     final combinations = expandCombinations(
       ticketType: ticketType,
       betType: betType,
-      purchase: purchase,
+      purchase: item.toMap(),
       multi: multi,
     );
 
-    // クイックピックは券面の組合せ数を優先（展開不能時のフォールバックにも使う）
-    final declaredCount = _asInt(ticketData['組合せ数']);
+    final declaredCount = ticket.combinationCount;
     var count = combinations.length;
     if (count == 0 && ticketType == 'クイックピック' && declaredCount != null) {
       count = declaredCount;
@@ -133,16 +137,12 @@ class TicketPayoutChecker {
   }
 
   /// 馬券全体の点数・合計金額を計算する
-  static TicketStakeSummary summarizeTicket(Map ticketData) {
-    final purchases = ticketData['購入内容'];
-    final summaries = <PurchaseStakeSummary>[];
-    if (purchases is List) {
-      for (final item in purchases) {
-        if (item is Map) {
-          summaries.add(summarizePurchase(ticketData, item));
-        }
-      }
-    }
+  static TicketStakeSummary summarizeTicket(dynamic ticketData) {
+    final ticket = _asTicket(ticketData);
+    final summaries = [
+      for (final purchase in ticket.purchases)
+        summarizePurchase(ticket, purchase),
+    ];
 
     return TicketStakeSummary(
       purchases: summaries,
@@ -152,6 +152,22 @@ class TicketPayoutChecker {
       ),
       totalAmountYen: summaries.fold(0, (sum, s) => sum + s.totalAmountYen),
     );
+  }
+
+  static Ticket _asTicket(dynamic value) {
+    if (value is Ticket) return value;
+    if (value is Map) {
+      return Ticket.fromMap(Map<String, dynamic>.from(value));
+    }
+    throw ArgumentError('ticketData must be Ticket or Map');
+  }
+
+  static PurchaseItem _asPurchase(dynamic value) {
+    if (value is PurchaseItem) return value;
+    if (value is Map) {
+      return PurchaseItem.fromMap(Map<String, dynamic>.from(value));
+    }
+    throw ArgumentError('purchase must be PurchaseItem or Map');
   }
 
   /// 購入内容から照合用の組合せキー集合を展開する

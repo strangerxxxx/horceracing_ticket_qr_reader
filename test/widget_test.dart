@@ -32,4 +32,25 @@ void main() {
       matchesSemantics(label: '式別、単勝'),
     );
   });
+
+  testWidgets('A11yLabeledRow uses semanticValue for widget rows', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: A11yLabeledRow(
+            label: '馬番',
+            semanticValue: '馬番1、馬番2',
+            valueWidget: Text('1-2'),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.byType(A11yLabeledRow)),
+      matchesSemantics(label: '馬番、馬番1、馬番2'),
+    );
+  });
 }

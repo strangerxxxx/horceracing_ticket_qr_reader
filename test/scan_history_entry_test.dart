@@ -29,22 +29,13 @@ void main() {
     expect(entry.title, '東京 1R');
   });
 
-  test('subtitle does not include race name', () {
+  test('error title and subtitle', () {
     final entry = ScanHistoryEntry(
-      id: '1',
-      scannedAt: DateTime(2026, 1, 15, 12, 30),
-      data: {
-        '年': 2026,
-        '回': 1,
-        '日': 2,
-        '券種': '通常',
-        'レース名': 'プリンシパルS(L)',
-        '購入内容': [
-          {'式別': '単勝'},
-        ],
-      },
+      id: 'e',
+      scannedAt: DateTime(2026, 1, 1),
+      data: {'エラー': '解析に失敗しました'},
     );
-
-    expect(entry.subtitle, '2026年 第1回 第2日 · 通常 · 単勝');
+    expect(entry.title, '解析エラー');
+    expect(entry.subtitle, '解析に失敗しました');
   });
 }

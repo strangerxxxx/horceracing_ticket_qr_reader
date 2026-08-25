@@ -56,4 +56,85 @@ void main() {
     final entries = await ScanHistoryService.load();
     expect(entries.length, 10);
   });
+
+  test('keeps at most 100 entries', () async {
+    for (var i = 0; i < 105; i++) {
+      await ScanHistoryService.add({'開催場': '東京', 'レース': i + 1});
+    }
+
+    final entries = await ScanHistoryService.load();
+    expect(entries.length, 100);
+    expect(entries.first.data['レース'], 105);
+    expect(entries.last.data['レース'], 6);
+  });
+
+  test('updateData patches nested purchase maps', () async {
+    final id = await ScanHistoryService.add({
+      '開催場': '東京',
+      'レース': 11,
+      '購入内容': [
+        {
+          '式別': '単勝',
+          '馬番': [12],
+          '購入金額': 100,
+        },
+      ],
+    });
+
+    await ScanHistoryService.updateData(id, {
+      'レース名': 'プリンシパルS(L)',
+      '開催日': '2025年5月4日',
+    });
+
+    final entries = await ScanHistoryService.load();
+    final entry = entries.singleWhere((e) => e.id == id);
+    expect(entry.data['レース名'], 'プリンシパルS(L)');
+    expect(entry.data['開催日'], '2025年5月4日');
+    expect(entry.data['購入内容'], isA<List>());
+    final purchase = (entry.data['購入内容'] as List).first as Map;
+    expect(purchase['式別'], '単勝');
+    expect(purchase['馬番'], [12]);
+  });
+
+  test('delete and clear remove entries', () async {
+    final id1 = await ScanHistoryService.add({'開催場': '東京', 'レース': 1});
+    final id2 = await ScanHistoryService.add({'開催場': '中山', 'レース': 2});
+
+    await ScanHistoryService.delete(id1);
+    var entries = await ScanHistoryService.load();
+    expect(entries.map((e) => e.id), [id2]);
+
+    await ScanHistoryService.clear();
+    entries = await ScanHistoryService.load();
+    expect(entries, isEmpty);
+  });
+
+  test('round-trips nested formation horse numbers', () async {
+    final id = await ScanHistoryService.add({
+      '開催場': '大井',
+      '場コード': '44',
+      '券種': 'フォーメーション',
+      '購入内容': [
+        {
+          '式別': '3連単',
+          '馬番': [
+            [1, 2],
+            [3],
+            [4, 5],
+          ],
+          '購入金額': 100,
+        },
+      ],
+    });
+
+    final entry =
+        (await ScanHistoryService.load()).singleWhere((e) => e.id == id);
+    final purchase = (entry.data['購入内容'] as List).first as Map;
+    expect(purchase['馬番'], [
+      [1, 2],
+      [3],
+      [4, 5],
+    ]);
+    expect(entry.ticket.purchases.single.numbers!.isNested, isTrue);
+  });
 }

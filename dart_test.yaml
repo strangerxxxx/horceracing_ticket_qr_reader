@@ -1,0 +1,3 @@
+tags:
+  live:
+    skip: "ネットワーク必須。実行: flutter test --tags live"

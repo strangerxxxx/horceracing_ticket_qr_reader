@@ -154,17 +154,28 @@ class _MyHomePageState extends State<MyHomePage> {
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _openQRScanner(),
-                    child: const Text('QRコード読み取り'),
+                  child: Semantics(
+                    button: true,
+                    label: 'QRコード読み取り',
+                    hint: '馬券のQRコードは2枚あります。カメラで両方を読み取ります',
+                    child: ElevatedButton(
+                      onPressed: () => _openQRScanner(),
+                      child: const Text('QRコード読み取り'),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _openQRScanner(openGalleryOnStart: true),
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text('画像から読み取り'),
+                  child: Semantics(
+                    button: true,
+                    label: '画像から読み取り',
+                    hint: '馬券のQRコードは2枚あります。2枚が写った画像、または1枚ずつ選んでください',
+                    child: OutlinedButton.icon(
+                      onPressed: () =>
+                          _openQRScanner(openGalleryOnStart: true),
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('画像から読み取り'),
+                    ),
                   ),
                 ),
               ],
@@ -224,16 +235,26 @@ class _HomeEmptyState extends StatelessWidget {
               '馬券のQRコードは2枚あります。両方をカメラでかざすか、'
               '2枚が写った画像を選んでください。',
               style: TextStyle(color: muted, height: 1.5),
-              liveRegion: false,
+              liveRegion: true,
             ),
             const SizedBox(height: 16),
-            TextButton(
-              onPressed: onScan,
-              child: const Text('カメラで読み取る'),
+            Semantics(
+              button: true,
+              label: 'カメラで読み取る',
+              hint: '馬券のQRコード2枚をカメラで読み取ります',
+              child: TextButton(
+                onPressed: onScan,
+                child: const Text('カメラで読み取る'),
+              ),
             ),
-            TextButton(
-              onPressed: onPickImage,
-              child: const Text('画像から読み取る'),
+            Semantics(
+              button: true,
+              label: '画像から読み取る',
+              hint: '馬券のQRコード2枚が写った画像を選びます',
+              child: TextButton(
+                onPressed: onPickImage,
+                child: const Text('画像から読み取る'),
+              ),
             ),
             const SizedBox(height: 24),
             Text(

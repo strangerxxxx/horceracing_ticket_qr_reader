@@ -1,6 +1,7 @@
 import 'package:app_settings/app_settings.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -8,6 +9,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'a11y_widgets.dart';
 import 'parse.dart';
 import 'parse_local.dart';
+import 'ticket.dart';
 
 class QRScannerPage extends StatefulWidget {
   /// true の場合、画面表示後にギャラリー選択を開く
@@ -46,11 +48,17 @@ class _QRScannerPageState extends State<QRScannerPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.openGalleryOnStart) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _pickAndAnalyzeImage();
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        _guideText,
+        TextDirection.ltr,
+      );
+      if (widget.openGalleryOnStart) {
+        _pickAndAnalyzeImage();
+      }
+    });
   }
 
   @override
@@ -296,10 +304,10 @@ class _QRScannerPageState extends State<QRScannerPage> {
   }
 
   Map<String, dynamic> _parse(String s) {
-    if (s.substring(3, 4) == '1') {
-      return parseHorseracingTicketQrLocal(s);
-    }
-    return parseHorseracingTicketQr(s);
+    final raw = s.substring(3, 4) == '1'
+        ? parseHorseracingTicketQrLocal(s)
+        : parseHorseracingTicketQr(s);
+    return Ticket.fromMap(raw).toMap();
   }
 
   Widget _buildCameraError(BuildContext context, MobileScannerException error) {
@@ -400,51 +408,61 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.continuousMode ? '続けて読み取り' : 'QRコードを読み取る'),
-        actions: [
-          ValueListenableBuilder(
-            valueListenable: _controller,
-            builder: (context, state, _) {
-              final unavailable = state.torchState == TorchState.unavailable;
-              final on = state.torchState == TorchState.on;
-              return IconButton(
-                tooltip: on ? 'ライトをオフ' : 'ライトをオン',
-                onPressed: unavailable ? null : _toggleTorch,
-                icon: Icon(on ? Icons.flash_on : Icons.flash_off),
-              );
-            },
-          ),
-          IconButton(
-            tooltip: 'やり直す',
-            onPressed: (_qrResults.isEmpty && !_processed) ? null : _resetScan,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            tooltip: '画像から読み取り',
-            onPressed: _analyzingImage ? null : _pickAndAnalyzeImage,
-            icon: const Icon(Icons.photo_library_outlined),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          MobileScanner(
-            fit: BoxFit.cover,
-            controller: _controller,
-            onDetect: _onDetect,
-            errorBuilder: _buildCameraError,
-          ),
-          _buildStatusBanner(),
-          if (_analyzingImage)
-            const ColoredBox(
-              color: Colors.black45,
-              child: Center(
-                child: A11yLoadingIndicator(message: '画像を解析しています…'),
-              ),
+    final pageLabel = widget.continuousMode
+        ? '続けて読み取り。$_guideText'
+        : 'QRコードを読み取る。$_guideText';
+
+    return Semantics(
+      container: true,
+      label: pageLabel,
+      explicitChildNodes: true,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.continuousMode ? '続けて読み取り' : 'QRコードを読み取る'),
+          actions: [
+            ValueListenableBuilder(
+              valueListenable: _controller,
+              builder: (context, state, _) {
+                final unavailable = state.torchState == TorchState.unavailable;
+                final on = state.torchState == TorchState.on;
+                return IconButton(
+                  tooltip: on ? 'ライトをオフ' : 'ライトをオン',
+                  onPressed: unavailable ? null : _toggleTorch,
+                  icon: Icon(on ? Icons.flash_on : Icons.flash_off),
+                );
+              },
             ),
-        ],
+            IconButton(
+              tooltip: 'やり直す',
+              onPressed:
+                  (_qrResults.isEmpty && !_processed) ? null : _resetScan,
+              icon: const Icon(Icons.refresh),
+            ),
+            IconButton(
+              tooltip: '画像から読み取り',
+              onPressed: _analyzingImage ? null : _pickAndAnalyzeImage,
+              icon: const Icon(Icons.photo_library_outlined),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            MobileScanner(
+              fit: BoxFit.cover,
+              controller: _controller,
+              onDetect: _onDetect,
+              errorBuilder: _buildCameraError,
+            ),
+            _buildStatusBanner(),
+            if (_analyzingImage)
+              const ColoredBox(
+                color: Colors.black45,
+                child: Center(
+                  child: A11yLoadingIndicator(message: '画像を解析しています…'),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

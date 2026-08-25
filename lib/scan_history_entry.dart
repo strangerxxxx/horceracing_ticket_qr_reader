@@ -1,4 +1,5 @@
 import 'local_race_url.dart';
+import 'ticket.dart';
 
 /// 読み取り履歴の1件分
 class ScanHistoryEntry {
@@ -12,6 +13,9 @@ class ScanHistoryEntry {
     required this.data,
   });
 
+  /// 型付きチケット（履歴JSONは日本語キーのまま）
+  Ticket get ticket => Ticket.fromMap(data);
+
   factory ScanHistoryEntry.fromJson(Map<String, dynamic> json) {
     return ScanHistoryEntry(
       id: json['id'] as String,
@@ -21,21 +25,20 @@ class ScanHistoryEntry {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'scannedAt': scannedAt.toIso8601String(),
-    'data': data,
-  };
+        'id': id,
+        'scannedAt': scannedAt.toIso8601String(),
+        'data': data,
+      };
 
   String get title {
-    if (data.containsKey('エラー')) return '解析エラー';
-
-    final venue = data['開催場']?.toString() ?? '';
-    final race = data['レース'];
-    final raceName = data['レース名']?.toString();
+    final t = ticket;
+    if (t.hasError) return '解析エラー';
 
     final parts = <String>[];
+    final venue = t.venueName ?? '';
     if (venue.isNotEmpty) parts.add(venue);
-    if (race != null) parts.add('${race}R');
+    if (t.raceNumber != null) parts.add('${t.raceNumber}R');
+    final raceName = t.raceName;
     if (raceName != null && raceName.isNotEmpty) parts.add(raceName);
 
     if (parts.isNotEmpty) return parts.join(' ');
@@ -43,31 +46,26 @@ class ScanHistoryEntry {
   }
 
   String get subtitle {
-    if (data.containsKey('エラー')) {
-      return data['エラー'].toString();
+    final t = ticket;
+    if (t.hasError) {
+      return t.error ?? '';
     }
 
     final parts = <String>[];
 
-    if (data['年'] != null) {
-      final year = data['年'];
-      final yearStr = year is int
-          ? LocalRaceUrlResolver.formatYearLabelForTicket(data, year)
-          : '$year年';
-      parts.add('$yearStr 第${data['回']}回 第${data['日']}日');
+    if (t.year != null) {
+      final yearStr = LocalRaceUrlResolver.formatYearLabelForTicket(data, t.year!);
+      parts.add('$yearStr 第${t.round}回 第${t.day}日');
     }
-    if (data['券種'] != null) {
-      parts.add(data['券種'].toString());
+    if (t.ticketType != null) {
+      parts.add(t.ticketType!);
     }
 
-    final purchases = data['購入内容'];
-    if (purchases is List && purchases.isNotEmpty) {
-      final first = purchases.first;
-      if (first is Map && first['式別'] != null) {
-        parts.add(first['式別'].toString());
-      }
-      if (purchases.length > 1) {
-        parts.add('他${purchases.length - 1}件');
+    if (t.purchases.isNotEmpty) {
+      final firstType = t.purchases.first.betType;
+      if (firstType != null) parts.add(firstType);
+      if (t.purchases.length > 1) {
+        parts.add('他${t.purchases.length - 1}件');
       }
     }
 
