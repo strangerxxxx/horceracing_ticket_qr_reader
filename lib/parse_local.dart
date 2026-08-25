@@ -173,6 +173,7 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
 
   String racecourseCode = itr.next() + itr.next();
   d["開催場"] = racecourseDict[racecourseCode];
+  d["場コード"] = racecourseCode;
   underDigits[0] = racecourseCode.substring(0, 1);
   underDigits[1] = racecourseCode.substring(1, 2);
 

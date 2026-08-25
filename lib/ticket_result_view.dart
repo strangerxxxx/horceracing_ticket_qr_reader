@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'external_url.dart';
+import 'local_race_url.dart';
 import 'race_result.dart';
 import 'race_result_fetcher.dart';
 import 'ticket_payout_checker.dart';
@@ -41,15 +42,19 @@ class _TicketResultViewState extends State<TicketResultView> {
   List<PurchaseCheckResult?> _checkResults = [];
   bool _loading = false;
   String? _error;
+  bool _resolvingUrl = false;
+  String? _resolvedUrl;
+  String? _urlResolveError;
 
   Map<String, dynamic> get data => widget.data;
+
+  String? get _effectiveUrl =>
+      _resolvedUrl ?? data['URL']?.toString();
 
   @override
   void initState() {
     super.initState();
-    if (data['URL'] != null && !data.containsKey('エラー')) {
-      _loadRaceResult();
-    }
+    _bootstrap();
   }
 
   @override
@@ -59,14 +64,80 @@ class _TicketResultViewState extends State<TicketResultView> {
       _raceResult = null;
       _checkResults = [];
       _error = null;
-      if (data['URL'] != null && !data.containsKey('エラー')) {
-        _loadRaceResult();
+      _resolvedUrl = null;
+      _urlResolveError = null;
+      _bootstrap();
+    }
+  }
+
+  Future<void> _bootstrap() async {
+    if (data.containsKey('エラー')) return;
+
+    if (data['URL'] != null) {
+      await _loadRaceResult();
+      return;
+    }
+
+    await _resolveLocalUrlIfNeeded();
+  }
+
+  Future<void> _resolveLocalUrlIfNeeded() async {
+    final code = data['場コード']?.toString();
+    final venue = data['開催場']?.toString();
+    final year = _asInt(data['年']);
+    final round = _asInt(data['回']);
+    final day = _asInt(data['日']);
+    final race = _asInt(data['レース']);
+
+    if (code == null ||
+        venue == null ||
+        year == null ||
+        round == null ||
+        day == null ||
+        race == null) {
+      return;
+    }
+
+    setState(() {
+      _resolvingUrl = true;
+      _urlResolveError = null;
+    });
+
+    try {
+      final url = await LocalRaceUrlResolver.resolve(
+        racecourseCode: code,
+        venueName: venue,
+        year: year,
+        round: round,
+        day: day,
+        race: race,
+      );
+      if (!mounted) return;
+
+      if (url == null) {
+        setState(() {
+          _resolvingUrl = false;
+          _urlResolveError = '開催日を特定できませんでした';
+        });
+        return;
       }
+
+      setState(() {
+        _resolvedUrl = url;
+        _resolvingUrl = false;
+      });
+      await _loadRaceResult();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _resolvingUrl = false;
+        _urlResolveError = '開催日の取得に失敗しました';
+      });
     }
   }
 
   Future<void> _loadRaceResult() async {
-    final url = data['URL']?.toString();
+    final url = _effectiveUrl;
     if (url == null || url.isEmpty) return;
 
     setState(() {
@@ -118,7 +189,7 @@ class _TicketResultViewState extends State<TicketResultView> {
         _buildSection(context, 'レース情報', _raceInfoRows(context)),
         const SizedBox(height: 16),
         _buildPurchaseSection(context),
-        if (data['URL'] != null) ...[
+        if (_effectiveUrl != null || _resolvingUrl || _urlResolveError != null) ...[
           const SizedBox(height: 16),
           _buildResultCheckSection(context),
         ],
@@ -183,13 +254,37 @@ class _TicketResultViewState extends State<TicketResultView> {
                 ),
                 IconButton(
                   tooltip: '再取得',
-                  onPressed: _loading ? null : _loadRaceResult,
+                  onPressed: (_loading || _resolvingUrl)
+                      ? null
+                      : () async {
+                          if (_effectiveUrl == null) {
+                            await _resolveLocalUrlIfNeeded();
+                          } else {
+                            await _loadRaceResult();
+                          }
+                        },
                   icon: const Icon(Icons.refresh),
                 ),
               ],
             ),
             const Divider(),
-            if (_loading)
+            if (_resolvingUrl)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  children: [
+                    Center(child: CircularProgressIndicator()),
+                    SizedBox(height: 8),
+                    Text('開催日を特定しています…'),
+                  ],
+                ),
+              )
+            else if (_urlResolveError != null && _effectiveUrl == null)
+              Text(
+                _urlResolveError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              )
+            else if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Center(child: CircularProgressIndicator()),
@@ -340,11 +435,15 @@ class _TicketResultViewState extends State<TicketResultView> {
     addRow('開催場', data['開催場']);
 
     if (data['年'] != null) {
-      final year = data['年'];
-      final yearStr = year is int && year < 100 ? '20$year' : year.toString();
+      final year = _asInt(data['年']);
+      final yearLabel = year == null
+          ? data['年'].toString()
+          : (LocalRaceUrlResolver.isReiwaFiscalYear(year) && data['場コード'] != null
+              ? '令和$year年度'
+              : (year < 100 ? '20$year年' : '$year年'));
       addRow(
         '開催',
-        '$yearStr年 第${data['回']}回 第${data['日']}日 ${data['レース']}R',
+        '$yearLabel 第${data['回']}回 第${data['日']}日 ${data['レース']}R',
       );
     }
 
@@ -356,8 +455,15 @@ class _TicketResultViewState extends State<TicketResultView> {
     addRow('着順指定', data['着順指定']);
     addRow('組合せ数', data['組合せ数']);
 
-    if (data['URL'] != null) {
-      rows.add(_UrlRow(url: data['URL'].toString()));
+    final url = _effectiveUrl;
+    if (url != null) {
+      rows.add(_UrlRow(url: url));
+    } else if (_resolvingUrl) {
+      rows.add(
+        const _InfoRow(label: 'URL', value: '開催日を特定中…'),
+      );
+    } else if (_urlResolveError != null) {
+      rows.add(_InfoRow(label: 'URL', value: _urlResolveError!));
     }
 
     return rows;
