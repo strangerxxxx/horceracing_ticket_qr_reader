@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
-import 'package:flutter/services.dart';
 
+import 'app_storage.dart';
 import 'http_fetch.dart';
 import 'parse_local.dart' show jyoCdDict;
 
@@ -25,7 +25,6 @@ class LocalRaceResolveResult {
 /// 地方競馬の開催日を keiba.go.jp 月次CSV + netkeiba から特定し、
 /// `https://db.netkeiba.com/race/{id}` 形式の URL を組み立てる。
 class LocalRaceUrlResolver {
-  static const _channel = MethodChannel('horceracing_ticket_qr_reader/storage');
   static const _monthFetchConcurrency = 3;
 
   /// EUC-JP: 回=0xB2F3 / 日目=0xC6FCCCDC
@@ -426,31 +425,5 @@ class LocalRaceUrlResolver {
     return dir;
   }
 
-  static Future<Directory> _storageDirectory() async {
-    if (Platform.isAndroid) {
-      final path = await _channel.invokeMethod<String>('getStorageDirectory');
-      if (path == null || path.isEmpty) {
-        throw StateError('Android storage directory is unavailable.');
-      }
-      return Directory(path);
-    }
-
-    if (Platform.isWindows) {
-      final localAppData = Platform.environment['LOCALAPPDATA'];
-      if (localAppData == null || localAppData.isEmpty) {
-        return Directory.current;
-      }
-      return Directory(
-        '$localAppData${Platform.pathSeparator}horceracing_ticket_qr_reader',
-      );
-    }
-
-    final home = Platform.environment['HOME'];
-    if (home == null || home.isEmpty) {
-      return Directory.current;
-    }
-    return Directory(
-      '$home${Platform.pathSeparator}.horceracing_ticket_qr_reader',
-    );
-  }
+  static Future<Directory> _storageDirectory() => AppStorage.directory();
 }

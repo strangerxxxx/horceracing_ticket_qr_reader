@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
-
+import 'app_storage.dart';
 import 'scan_history_entry.dart';
 import 'scan_history_query.dart';
 import 'ticket_payout_checker.dart';
@@ -12,13 +11,14 @@ import 'ticket_payout_checker.dart';
 class ScanHistoryService {
   static const _fileName = 'scan_history.json';
   static const _maxEntries = 100;
-  static const _channel = MethodChannel('horceracing_ticket_qr_reader/storage');
 
   /// 同時書き込みを直列化する
   static Future<void> _lock = Future.value();
 
   /// テスト用に保存先を差し替える
-  static Directory? debugDirectory;
+  static Directory? get debugDirectory => AppStorage.debugDirectory;
+  static set debugDirectory(Directory? value) =>
+      AppStorage.debugDirectory = value;
 
   static Future<T> _synchronized<T>(Future<T> Function() action) {
     final previous = _lock;
@@ -186,32 +186,5 @@ class ScanHistoryService {
     return File('${directory.path}${Platform.pathSeparator}$_fileName');
   }
 
-  static Future<Directory> _storageDirectory() async {
-    if (debugDirectory != null) return debugDirectory!;
-
-    if (Platform.isAndroid) {
-      final path = await _channel.invokeMethod<String>('getStorageDirectory');
-      if (path == null || path.isEmpty) {
-        throw StateError('Android storage directory is unavailable.');
-      }
-      return Directory(path);
-    }
-
-    if (Platform.isWindows) {
-      final localAppData = Platform.environment['LOCALAPPDATA'];
-      if (localAppData == null || localAppData.isEmpty) {
-        return Directory.current;
-      }
-      return Directory(
-        '$localAppData${Platform.pathSeparator}horceracing_ticket_qr_reader',
-      );
-    }
-
-    final home = Platform.environment['HOME'];
-    if (home == null || home.isEmpty) {
-      return Directory.current;
-    }
-
-    return Directory('$home${Platform.pathSeparator}.horceracing_ticket_qr_reader');
-  }
+  static Future<Directory> _storageDirectory() => AppStorage.directory();
 }

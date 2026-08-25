@@ -1,14 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
-
+import 'app_storage.dart';
 import 'race_result.dart';
 
 /// netkeiba レース結果のディスクキャッシュ
 class RaceResultCache {
-  static const _channel = MethodChannel('horceracing_ticket_qr_reader/storage');
-
   /// 払戻未確定結果の再取得間隔
   static const incompleteTtl = Duration(minutes: 15);
 
@@ -94,30 +91,7 @@ class RaceResultCache {
   }
 
   static Future<Directory> _storageDirectory() async {
-    if (Platform.isAndroid) {
-      final path = await _channel.invokeMethod<String>('getStorageDirectory');
-      if (path == null || path.isEmpty) {
-        throw StateError('Android storage directory is unavailable.');
-      }
-      return Directory(path);
-    }
-
-    if (Platform.isWindows) {
-      final localAppData = Platform.environment['LOCALAPPDATA'];
-      if (localAppData == null || localAppData.isEmpty) {
-        return Directory.current;
-      }
-      return Directory(
-        '$localAppData${Platform.pathSeparator}horceracing_ticket_qr_reader',
-      );
-    }
-
-    final home = Platform.environment['HOME'];
-    if (home == null || home.isEmpty) {
-      return Directory.current;
-    }
-    return Directory(
-      '$home${Platform.pathSeparator}.horceracing_ticket_qr_reader',
-    );
+    if (debugDirectory != null) return debugDirectory!;
+    return AppStorage.directory();
   }
 }
