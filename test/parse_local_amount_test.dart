@@ -23,7 +23,7 @@ void main() {
     expect(exacta['式別'], '馬番連単');
     expect(exacta['馬番'], [4, 6]);
     expect(exacta['購入金額'], 200);
-    expect(exacta.containsKey('ウラ'), isFalse);
+    expect(exacta['ウラ'], 'なし');
   });
 
   test('川崎発売のJRA京都通常馬券を読む', () {

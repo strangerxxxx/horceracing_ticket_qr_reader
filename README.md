@@ -37,7 +37,7 @@ flutter build apk --release
 ## 参考文献
 
 QR コードの解析部分については、下記ブログを参考にさせていただきました。  
-[yoshi223のブログ: JRA 日本中央競馬会の馬券レイアウトまとめ＆QR コード解析](https://ys223.blogspot.com/2019/07/jra.html)
+[yoshi223のブログ: JRA 日本中央競馬会の馬券レイアウトまとめ＆QR コード解析](https://ys223.blogspot.com/2019/07/jra.html)  
 [yoshi223のブログ: 地方競馬 馬券の種類と投票カード](https://ys223.blogspot.com/2019/09/blog-post_10.html)
 
 ## TODO

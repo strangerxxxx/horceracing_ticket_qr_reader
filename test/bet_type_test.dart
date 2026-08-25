@@ -5,6 +5,8 @@ import 'package:horceracing_ticket_qr_reader/ticket_payout_checker.dart';
 
 void main() {
   test('normalizeBetType maps local names to netkeiba names', () {
+    expect(normalizeBetType('枠番連複'), '枠連');
+    expect(normalizeBetType('枠番連単'), '枠単');
     expect(normalizeBetType('枠連複'), '枠連');
     expect(normalizeBetType('枠連単'), '枠単');
     expect(normalizeBetType('普通馬複'), '馬連');
@@ -14,6 +16,15 @@ void main() {
     expect(normalizeBetType('3連複'), '三連複');
     expect(normalizeBetType('3連単'), '三連単');
     expect(normalizeBetType('単勝'), '単勝');
+  });
+
+  test('isUnorderedBetType covers 馬連 枠連 ワイド 三連複', () {
+    expect(isUnorderedBetType('普通馬複'), isTrue);
+    expect(isUnorderedBetType('枠番連複'), isTrue);
+    expect(isUnorderedBetType('ワイド'), isTrue);
+    expect(isUnorderedBetType('馬3連複'), isTrue);
+    expect(isUnorderedBetType('馬番連単'), isFalse);
+    expect(isUnorderedBetType('単勝'), isFalse);
   });
 
   test('checkPurchase uses local bet type aliases against netkeiba payouts', () {
@@ -96,7 +107,7 @@ void main() {
       TicketPayoutChecker.checkPurchase(
         ticket,
         {
-          '式別': '枠連複',
+          '式別': '枠番連複',
           '馬番': [2, 5],
           '購入金額': 100,
         },
@@ -108,7 +119,7 @@ void main() {
       TicketPayoutChecker.checkPurchase(
         ticket,
         {
-          '式別': '枠連単',
+          '式別': '枠番連単',
           '馬番': [2, 5],
           '購入金額': 100,
         },

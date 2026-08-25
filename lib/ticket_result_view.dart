@@ -454,7 +454,9 @@ class _TicketResultViewState extends State<TicketResultView> {
 
     final url = _effectiveUrl;
     if (url != null) {
-      rows.add(_UrlRow(url: url));
+      for (final link in NetkeibaUrls.displayUrls(url)) {
+        rows.add(_UrlRow(url: link));
+      }
     } else if (_resolvingUrl) {
       rows.add(
         const _InfoRow(label: 'URL', value: '開催日を特定中…'),
@@ -554,10 +556,19 @@ class _TicketResultViewState extends State<TicketResultView> {
     }
 
     addField('式別', item['式別']);
-    addField('馬番', item['馬番']);
     addField('ながし', item['ながし']);
-    addField('軸', item['軸']);
-    addField('相手', item['相手']);
+
+    final betType = item['式別']?.toString() ?? '';
+    final ticketType = data['券種']?.toString() ?? '';
+    final horsesText = _formatPurchaseHorses(
+      item,
+      betType: betType,
+      ticketType: ticketType,
+      horseNamesByNumber: _raceResult?.horseNamesByNumber,
+    );
+    if (horsesText != null) {
+      addField('馬番', horsesText);
+    }
     addField('ウラ', item['ウラ']);
 
     if (stake != null) {
@@ -629,6 +640,114 @@ class _TicketResultViewState extends State<TicketResultView> {
       return list.map((inner) => _formatList(inner as List)).join(' / ');
     }
     return list.map((e) => e.toString()).join(', ');
+  }
+
+  /// 馬単・枠単・三連単など着順のある式別
+  static bool _isOrderedBet(String betType) => isOrderedBetType(betType);
+
+  static bool _isUnorderedBet(String betType) => isUnorderedBetType(betType);
+
+  /// 購入内容の馬番表示文字列を組み立てる
+  static String? _formatPurchaseHorses(
+    Map item, {
+    required String betType,
+    required String ticketType,
+    Map<int, String>? horseNamesByNumber,
+  }) {
+    final isBox = ticketType == 'ボックス';
+    final ura = item['ウラ']?.toString() == 'あり';
+
+    // ながし（軸・相手）は式別に関わらず → でつなぐ
+    if (item['軸'] != null && item['相手'] != null) {
+      final nagashi = item['ながし']?.toString() ?? '';
+      final axisStr = _formatHorseGroup(item['軸']);
+      final partnerStr = _formatHorseGroup(item['相手']);
+      if (_isOrderedBet(betType) && nagashi.contains('2着')) {
+        return '$partnerStr > $axisStr';
+      }
+      if (_isOrderedBet(betType)) {
+        return '$axisStr > $partnerStr';
+      }
+      return '$axisStr → $partnerStr';
+    }
+
+    final horses = item['馬番'];
+    if (horses is! List || horses.isEmpty) return null;
+
+    // 単勝・複勝・応援馬券（中身は単勝/複勝）: `1 馬名`
+    if (betType == '単勝' || betType == '複勝') {
+      return _formatWinPlaceHorses(horses, horseNamesByNumber);
+    }
+
+    if (_isOrderedBet(betType)) {
+      return _formatOrderedSlots(horses, ura: ura, isBox: isBox);
+    }
+
+    if (_isUnorderedBet(betType)) {
+      return _formatUnorderedSlots(horses, isBox: isBox);
+    }
+
+    return _formatValue(horses);
+  }
+
+  /// 単勝・複勝: 馬番の後ろにレース結果の馬名を付ける
+  static String _formatWinPlaceHorses(
+    List horses,
+    Map<int, String>? horseNamesByNumber,
+  ) {
+    return horses.map((e) {
+      final number = e is int ? e : int.tryParse(e.toString());
+      final label = number?.toString() ?? e.toString();
+      if (number == null || horseNamesByNumber == null) return label;
+      final name = horseNamesByNumber[number];
+      if (name == null || name.isEmpty) return label;
+      return '$label $name';
+    }).join(', ');
+  }
+
+  static String _formatOrderedSlots(
+    List list, {
+    required bool ura,
+    required bool isBox,
+  }) {
+    if (isBox) {
+      return _formatBoxHorses(list);
+    }
+    if (ura && list.length == 2 && list.first is! List) {
+      return '${list[0]} <> ${list[1]}';
+    }
+    if (list.first is List) {
+      return list.map(_formatHorseGroup).join(' > ');
+    }
+    return list.map((e) => e.toString()).join(' > ');
+  }
+
+  /// 馬連・枠連・ワイド・三連複（ながし以外）: `1 - 2 - 3` / `1 - 2, 3 - 4`
+  static String _formatUnorderedSlots(List list, {required bool isBox}) {
+    if (isBox) {
+      return _formatBoxHorses(list);
+    }
+    if (list.first is List) {
+      return list.map(_formatHorseGroup).join(' - ');
+    }
+    return list.map((e) => e.toString()).join(' - ');
+  }
+
+  static String _formatBoxHorses(List list) {
+    if (list.isNotEmpty && list.first is List) {
+      return list
+          .expand((inner) => inner is List ? inner : [inner])
+          .map((e) => e.toString())
+          .join(', ');
+    }
+    return list.map((e) => e.toString()).join(', ');
+  }
+
+  static String _formatHorseGroup(dynamic value) {
+    if (value is List) {
+      return value.map((e) => e.toString()).join(', ');
+    }
+    return value.toString();
   }
 }
 

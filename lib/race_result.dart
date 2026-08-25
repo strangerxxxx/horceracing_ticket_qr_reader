@@ -22,14 +22,20 @@ class RaceResult {
   final Map<String, List<PayoutEntry>> payoutsByBetType;
   final bool hasResults;
 
+  /// 馬番 → 馬名（レース結果表から取得。無い場合は空）
+  final Map<int, String> horseNamesByNumber;
+
   const RaceResult({
     required this.url,
     required this.payoutsByBetType,
     required this.hasResults,
+    this.horseNamesByNumber = const {},
   });
 
   List<PayoutEntry> payoutsFor(String betType) =>
       payoutsByBetType[betType] ?? const [];
+
+  String? horseName(int number) => horseNamesByNumber[number];
 }
 
 /// 購入内容1件の照合結果

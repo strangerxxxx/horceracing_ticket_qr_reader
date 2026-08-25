@@ -53,7 +53,6 @@ const Map<String, String> typeDict = {
   "1": "ボックス",
   "2": "ながし",
   "3": "フォーメーション",
-  "4": "クイックピック",
   "5": "応援馬券",
 };
 
@@ -74,10 +73,11 @@ const Map<String, String> ticketofficeDict = {
   "245": "石狩場外発売所",
   "246": "登別室蘭場外発売所",
   "247": "札幌中央場外発売所",
-  "249": "くしろ場外発売所",
+  "249": "釧路場外発売所",
   "260": "帯広競馬場",
   "261": "旭川場外発売所",
   "262": "北見場外発売所",
+  "263": "釧路場外発売所",
   "264": "名寄場外発売所",
   "266": "岩見沢場外発売所",
   "267": "網走場外発売所",
@@ -90,10 +90,14 @@ const Map<String, String> ticketofficeDict = {
   "276": "テレトラック種市",
   "278": "テレトラック三本木",
   "279": "テレトラック横手",
+  "280": "テレトラック山本",
   "283": "東京競馬場",
   "286": "秋田場外発売所",
+  "287": "テレトラック石鳥谷",
   "300": "東京・大井競馬場",
   "301": "offtひたちなか",
+  "302": "offt後楽園",
+  "303": "offt汐留",
   "306": "オープス中郷",
   "307": "オープス磐梯",
   "308": "益田場外発売所",
@@ -107,9 +111,11 @@ const Map<String, String> ticketofficeDict = {
   "322": "ジョイホース浜松",
   "323": "offt伊勢崎",
   "324": "ジョイホース双葉",
+  "327": "オフト京王閣",
   "400": "名古屋場内発売所",
   "403": "弥富場外発売所",
   "404": "磯部場外発売所",
+  "406": "大須場外発売所",
   "407": "一宮場外発売所",
   "408": "名古屋場外発売所",
   "480": "園田競馬場",
@@ -140,8 +146,8 @@ const Map<String, String> ticketofficeDict = {
 const Map<String, String> bettingDict = {
   "1": "単勝",
   "2": "複勝",
-  "3": "枠連複",
-  "4": "枠連単",
+  "3": "枠番連複",
+  "4": "枠番連単",
   "5": "普通馬複",
   "6": "馬番連単",
   "7": "ワイド",
@@ -153,7 +159,8 @@ const Map<String, String> wheelExactaDict = {"1": "1着ながし", "2": "2着な
 
 const Map<String, String> wheelTrioDict = {"3": "軸2頭ながし", "7": "軸1頭ながし"};
 
-/// 地方競馬の3連単ながしコード（JRAの wheelTrifectaDict とは異なる）
+/// 地方競馬の3連単ながしコード（フォーマット1〜3）
+/// JRA および地方フォーマット4以降とは異なる
 const Map<String, String> wheelTrifectaDict = {
   "1": "1着ながし",
   "2": "2着ながし",
@@ -162,6 +169,21 @@ const Map<String, String> wheelTrifectaDict = {
   "5": "1・3着ながし",
   "6": "3着ながし",
 };
+
+/// 地方フォーマット4以降の3連単ながしコード（JRAと同じ並び）
+const Map<String, String> wheelTrifectaDictFmt4 = {
+  "1": "1・2着ながし",
+  "2": "1・3着ながし",
+  "3": "2・3着ながし",
+  "4": "1着ながし",
+  "5": "2着ながし",
+  "6": "3着ながし",
+};
+
+Map<String, String> _trifectaWheelDict(String ticketFormat) {
+  final formatNo = int.tryParse(ticketFormat) ?? 1;
+  return formatNo >= 4 ? wheelTrifectaDictFmt4 : wheelTrifectaDict;
+}
 
 Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
   List<String> underDigits = List.filled(42, "X");
@@ -191,7 +213,7 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
     } else if (alternativeCode == "4") {
       d["開催種別"] = "代2";
     } else {
-      d["開催種別"] = "不明";
+      d["開催種別"] = "不明($alternativeCode)";
     }
   }
   underDigits[4] = "0";
@@ -241,7 +263,7 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
   underDigits[9] = itr.next();
 
   String ticketofficeCode = underDigits.sublist(29, 32).join();
-  d["発売所"] = ticketofficeDict[ticketofficeCode] ?? "不明";
+  d["発売所"] = ticketofficeDict[ticketofficeCode] ?? "不明($ticketofficeCode)";
 
   underDigits[4] = typeCode;
   d["購入内容"] = [];
@@ -290,16 +312,25 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
         }
         // 馬番欄はフォーマット幅 c スロット（余りは00）。
         // 馬番連単(6)と必要頭数が c を超える式別は実頭数ぶんだけ読む。
-        final slotCount =
-            (bettingCode == "6" || count > c || typeCode == "5") ? count : c;
+        final slotCount = (bettingCode == "6" || count > c || typeCode == "5")
+            ? count
+            : c;
         final slotNumbers = [
-          for (int i = 0; i < slotCount; i++) int.parse(itr.next() + itr.next()),
+          for (int i = 0; i < slotCount; i++)
+            int.parse(itr.next() + itr.next()),
         ];
         di["馬番"] = slotNumbers.take(count).toList();
 
-        // 「ウラ」はフォーマット1の単勝・複勝のみ（馬番連単には無い）
-        if ((bettingCode == "1" || bettingCode == "2") && ticketFormat == "1") {
+        // ウラ/予備2桁:
+        // - 応援馬券の単勝・複勝: 常に2桁（金額の直前）
+        // - フォーマット1の単勝・複勝: 2桁
+        // - 馬番連単: フォーマット2以降はウラ欄（01=あり）
+        if ((bettingCode == "1" || bettingCode == "2") &&
+            (ticketFormat == "1" || typeCode == "5")) {
           itr.move(2);
+        } else if (bettingCode == "6" && ticketFormat != "1") {
+          final ura = itr.next() + itr.next();
+          di["ウラ"] = ura == "01" ? "あり" : "なし";
         }
 
         String purchaseAmountStr = "";
@@ -307,6 +338,10 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
           purchaseAmountStr += itr.next();
         }
         di["購入金額"] = int.parse("${purchaseAmountStr}00");
+
+        if (bettingCode == "6" && ticketFormat == "1") {
+          di["ウラ"] = underDigits[9] == "2" ? "あり" : "なし";
+        }
 
         if (underDigits[5] == "0") {
           underDigits[5] = bettingCode;
@@ -365,13 +400,34 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
           di["ながし"] = wheelTrioDict[wheelCode];
           break;
         case "9":
-          di["ながし"] = wheelTrifectaDict[wheelCode];
+          di["ながし"] = _trifectaWheelDict(ticketFormat)[wheelCode];
           break;
         default:
           di["ながし"] = "ながし";
       }
       int count = 0;
-      if (bettingCode == "6" || bettingCode == "8") {
+      if (bettingCode == "6") {
+        // 地方の馬番連単ながし: 軸(2桁) + 金額(5) + 相手ビットマップ(18)
+        di["軸"] = int.parse(itr.next() + itr.next());
+        String purchaseAmountStr = "";
+        for (int i = 0; i < 5; i++) {
+          purchaseAmountStr += itr.next();
+        }
+        di["購入金額"] = int.parse("${purchaseAmountStr}00");
+        List<int> innerList = [];
+        for (int i = 1; i <= 18; i++) {
+          if (itr.next() == "1") {
+            innerList.add(i);
+          }
+        }
+        di["相手"] = innerList;
+        count = innerList.length;
+      } else if (bettingCode == "3" ||
+          bettingCode == "5" ||
+          bettingCode == "7" ||
+          bettingCode == "8") {
+        // 枠番連複・普通馬複・ワイド・馬3連複ながし:
+        // 軸ビットマップ2面 + 相手ビットマップ1面 + 金額
         List<int> horseNumbers = [];
         for (int j = 0; j < 2; j++) {
           for (int i = 1; i <= 18; i++) {
@@ -407,22 +463,13 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
           }
         }
       } else {
-        di["軸"] = int.parse(itr.next() + itr.next());
-        String purchaseAmountStr = "";
-        for (int i = 0; i < 5; i++) {
-          purchaseAmountStr += itr.next();
-        }
-        di["購入金額"] = int.parse("${purchaseAmountStr}00");
-        List<int> innerList = [];
-        for (int i = 1; i <= 18; i++) {
-          if (itr.next() == "1") {
-            innerList.add(i);
-          }
-        }
-        di["相手"] = innerList;
-        count = innerList.length;
+        throw ArgumentError("Unexpected nagashi betting_code: $bettingCode");
       }
-      if (bettingCode == "6" || bettingCode == "8" || bettingCode == "9") {
+      if (bettingCode == "3" ||
+          bettingCode == "5" ||
+          bettingCode == "7" ||
+          bettingCode == "8" ||
+          bettingCode == "9") {
         String purchaseAmountStr = "";
         for (int i = 0; i < 5; i++) {
           purchaseAmountStr += itr.next();
@@ -468,48 +515,6 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
       di["購入金額"] = int.parse("${purchaseAmountStr}00");
 
       itr.next();
-
-      underDigits[5] = bettingCode;
-      (d["購入内容"] as List).add(di);
-      break;
-
-    case "4": // クイックピック
-      Map<String, dynamic> di = {};
-      String bettingCode = itr.next();
-      di["式別"] = bettingDict[bettingCode];
-
-      int no = int.parse(itr.next() + itr.next());
-      if (no != 0) {
-        d["軸"] = no;
-      }
-
-      int positionSpecify = int.parse(itr.next());
-      if (bettingCode == "6" || bettingCode == "9") {
-        d["着順指定"] = positionSpecify != 0 ? "$positionSpecify着指定" : "なし";
-      }
-
-      d["組合せ数"] = int.parse(itr.next() + itr.next());
-
-      String purchaseAmountStr = "";
-      for (int i = 0; i < 5; i++) {
-        purchaseAmountStr += itr.next();
-      }
-      di["購入金額"] = int.parse("${purchaseAmountStr}00");
-
-      itr.move(2);
-
-      List<List<int>> horseNumbersList = [];
-      for (int i = 0; i < d["組合せ数"]; i++) {
-        List<int> innerList = [];
-        for (int j = 0; j < 3; j++) {
-          int horseNum = int.parse(itr.next() + itr.next());
-          if (horseNum != 0) {
-            innerList.add(horseNum);
-          }
-        }
-        horseNumbersList.add(innerList);
-      }
-      di["馬番"] = horseNumbersList;
 
       underDigits[5] = bettingCode;
       (d["購入内容"] as List).add(di);

@@ -1,3 +1,4 @@
+import 'package:charset/charset.dart';
 import 'package:http/http.dart' as http;
 
 import 'bet_type.dart';
@@ -31,20 +32,27 @@ class RaceResultFetcher {
       throw Exception('レース結果の取得に失敗しました (${response.statusCode})');
     }
 
-    // 払戻テーブルの class / 数字は ASCII なので、バイト列を Latin-1 として扱える
-    final html = String.fromCharCodes(response.bodyBytes);
+    // netkeiba は EUC-JP。馬名表示のため正しくデコードする。
+    final html = const EucJPCodec(true).decode(response.bodyBytes);
     return parseHtml(html, url);
   }
 
   /// テスト・デバッグ用に公開
   static RaceResult parseHtml(String html, String url) {
+    final horseNamesByNumber = parseHorseNames(html);
+
     final payBlockMatch = RegExp(
       r'class="pay_block"[\s\S]*?</dl>',
       caseSensitive: false,
     ).firstMatch(html);
 
     if (payBlockMatch == null) {
-      return RaceResult(url: url, payoutsByBetType: const {}, hasResults: false);
+      return RaceResult(
+        url: url,
+        payoutsByBetType: const {},
+        hasResults: false,
+        horseNamesByNumber: horseNamesByNumber,
+      );
     }
 
     final payBlock = payBlockMatch.group(0)!;
@@ -94,7 +102,44 @@ class RaceResultFetcher {
       url: url,
       payoutsByBetType: payoutsByBetType,
       hasResults: payoutsByBetType.isNotEmpty,
+      horseNamesByNumber: horseNamesByNumber,
     );
+  }
+
+  /// `race_table_01` から馬番→馬名を読む
+  static Map<int, String> parseHorseNames(String html) {
+    final tableMatch = RegExp(
+      r'class="race_table_01[^"]*"[\s\S]*?</table>',
+      caseSensitive: false,
+    ).firstMatch(html);
+    if (tableMatch == null) return const {};
+
+    final names = <int, String>{};
+    final rowPattern = RegExp(r'<tr>([\s\S]*?)</tr>', caseSensitive: false);
+
+    for (final rowMatch in rowPattern.allMatches(tableMatch.group(0)!)) {
+      final row = rowMatch.group(1)!;
+      final nameMatch = RegExp(
+        r'<a href="/horse/[^"]*"[^>]*>([^<]+)</a>',
+        caseSensitive: false,
+      ).firstMatch(row);
+      if (nameMatch == null) continue;
+
+      final tds = RegExp(r'<td[^>]*>([\s\S]*?)</td>', caseSensitive: false)
+          .allMatches(row)
+          .map((m) => _normalizeSpaces(_stripTags(m.group(1)!)))
+          .toList();
+      // 着順 / 枠番 / 馬番 / 馬名 ...
+      if (tds.length < 3) continue;
+      final number = int.tryParse(tds[2]);
+      if (number == null || number <= 0) continue;
+
+      final name = _normalizeSpaces(nameMatch.group(1)!);
+      if (name.isEmpty) continue;
+      names[number] = name;
+    }
+
+    return names;
   }
 
   /// 表示文字列を照合用キーに正規化する
