@@ -228,15 +228,7 @@ class _TicketResultViewState extends State<TicketResultView> {
     final valid = _checkResults.whereType<PurchaseCheckResult>().toList();
     final hits = valid.where((r) => r.hit).length;
     final totalPayout = valid.fold<int>(0, (sum, r) => sum + r.payoutYen);
-    final purchases = data['購入内容'];
-    var totalStake = 0;
-    if (purchases is List) {
-      for (final item in purchases) {
-        if (item is Map && item['購入金額'] is int) {
-          totalStake += item['購入金額'] as int;
-        }
-      }
-    }
+    final stake = TicketPayoutChecker.summarizeTicket(data);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,11 +243,15 @@ class _TicketResultViewState extends State<TicketResultView> {
           ),
         ),
         const SizedBox(height: 8),
-        _InfoRow(label: '購入合計', value: _formatYen(totalStake)),
+        _InfoRow(label: '組合せ', value: '${stake.totalCombinationCount}点'),
+        _InfoRow(label: '購入合計', value: _formatYen(stake.totalAmountYen)),
         _InfoRow(label: '払戻合計', value: _formatYen(totalPayout)),
         _InfoRow(
           label: '収支',
-          value: _formatYen(totalPayout - totalStake, showSign: true),
+          value: _formatYen(
+            totalPayout - stake.totalAmountYen,
+            showSign: true,
+          ),
         ),
       ],
     );
@@ -400,6 +396,8 @@ class _TicketResultViewState extends State<TicketResultView> {
       return const SizedBox.shrink();
     }
 
+    final stake = TicketPayoutChecker.summarizeTicket(data);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -419,8 +417,18 @@ class _TicketResultViewState extends State<TicketResultView> {
                 context,
                 purchases[i],
                 i < _checkResults.length ? _checkResults[i] : null,
+                i < stake.purchases.length ? stake.purchases[i] : null,
               ),
             ],
+            const Divider(),
+            _InfoRow(
+              label: '合計点数',
+              value: '${stake.totalCombinationCount}点',
+            ),
+            _InfoRow(
+              label: '合計金額',
+              value: _formatYen(stake.totalAmountYen),
+            ),
           ],
         ),
       ),
@@ -431,6 +439,7 @@ class _TicketResultViewState extends State<TicketResultView> {
     BuildContext context,
     dynamic item,
     PurchaseCheckResult? check,
+    PurchaseStakeSummary? stake,
   ) {
     if (item is! Map) return const SizedBox.shrink();
 
@@ -447,9 +456,23 @@ class _TicketResultViewState extends State<TicketResultView> {
     addField('軸', item['軸']);
     addField('相手', item['相手']);
     addField('ウラ', item['ウラ']);
-    final amount = _asInt(item['購入金額']);
-    if (amount != null) {
-      addField('購入金額', _formatYen(amount));
+
+    if (stake != null) {
+      addField('組合せ数', '${stake.combinationCount}点');
+      if (stake.unitAmountYen > 0) {
+        addField(
+          stake.combinationCount > 1 ? '単位金額' : '購入金額',
+          _formatYen(stake.unitAmountYen),
+        );
+      }
+      if (stake.combinationCount > 1) {
+        addField('合計金額', _formatYen(stake.totalAmountYen));
+      }
+    } else {
+      final amount = _asInt(item['購入金額']);
+      if (amount != null) {
+        addField('購入金額', _formatYen(amount));
+      }
     }
 
     return Container(

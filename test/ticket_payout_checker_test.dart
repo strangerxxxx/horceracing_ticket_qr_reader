@@ -97,4 +97,77 @@ void main() {
     expect(exacta.hit, isTrue);
     expect(exacta.payoutYen, 74400);
   });
+
+  test('summarizePurchase counts combinations and total stake', () {
+    final normal = TicketPayoutChecker.summarizePurchase(
+      {'券種': '通常'},
+      {'式別': '単勝', '馬番': [5], '購入金額': 1000},
+    );
+    expect(normal.combinationCount, 1);
+    expect(normal.totalAmountYen, 1000);
+
+    final ura = TicketPayoutChecker.summarizePurchase(
+      {'券種': '通常'},
+      {'式別': '馬単', '馬番': [1, 2], 'ウラ': 'あり', '購入金額': 100},
+    );
+    expect(ura.combinationCount, 2);
+    expect(ura.totalAmountYen, 200);
+
+    final box = TicketPayoutChecker.summarizePurchase(
+      {'券種': 'ボックス'},
+      {'式別': '馬連', '馬番': [1, 2, 3, 4], '購入金額': 100},
+    );
+    // C(4,2) = 6
+    expect(box.combinationCount, 6);
+    expect(box.totalAmountYen, 600);
+
+    final ticket = TicketPayoutChecker.summarizeTicket({
+      '券種': '通常',
+      '購入内容': [
+        {'式別': '単勝', '馬番': [1], '購入金額': 500},
+        {'式別': '複勝', '馬番': [2], '購入金額': 200},
+      ],
+    });
+    expect(ticket.totalCombinationCount, 2);
+    expect(ticket.totalAmountYen, 700);
+  });
+
+  test('3連単 1・2着ながし マルチは基本点×6', () {
+    // 馬番: 1着=10, 2着=14, 3着=1,2 → 基本2点
+    // マルチあり → 2 × 6 = 12点
+    final summary = TicketPayoutChecker.summarizePurchase(
+      {'券種': 'ながし', 'マルチ': 'あり'},
+      {
+        '式別': '3連単',
+        'ながし': '1・2着ながし',
+        '馬番': [
+          [10],
+          [14],
+          [1, 2],
+        ],
+        '購入金額': 100,
+      },
+    );
+    expect(summary.combinationCount, 12);
+    expect(summary.totalAmountYen, 1200);
+
+    final combos = TicketPayoutChecker.expandCombinations(
+      ticketType: 'ながし',
+      betType: '3連単',
+      purchase: {
+        'ながし': '1・2着ながし',
+        '馬番': [
+          [10],
+          [14],
+          [1, 2],
+        ],
+      },
+      multi: true,
+    );
+    expect(combos.length, 12);
+    expect(combos.contains('10>14>1'), isTrue);
+    expect(combos.contains('1>10>14'), isTrue);
+    expect(combos.contains('10>14>2'), isTrue);
+    expect(combos.contains('2>14>10'), isTrue);
+  });
 }

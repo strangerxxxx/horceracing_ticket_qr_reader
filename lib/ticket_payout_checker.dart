@@ -1,6 +1,37 @@
 import 'race_result.dart';
 import 'race_result_fetcher.dart';
 
+/// 購入内容1件分の点数・金額サマリー
+class PurchaseStakeSummary {
+  /// 組合せ点数
+  final int combinationCount;
+
+  /// QRに記録された購入金額（単位金額）
+  final int unitAmountYen;
+
+  /// 合計金額 = 単位金額 × 点数
+  final int totalAmountYen;
+
+  const PurchaseStakeSummary({
+    required this.combinationCount,
+    required this.unitAmountYen,
+    required this.totalAmountYen,
+  });
+}
+
+/// 馬券全体の点数・金額サマリー
+class TicketStakeSummary {
+  final List<PurchaseStakeSummary> purchases;
+  final int totalCombinationCount;
+  final int totalAmountYen;
+
+  const TicketStakeSummary({
+    required this.purchases,
+    required this.totalCombinationCount,
+    required this.totalAmountYen,
+  });
+}
+
 /// 購入内容とレース払戻を照合する
 class TicketPayoutChecker {
   static PurchaseCheckResult checkPurchase(
@@ -31,7 +62,7 @@ class TicketPayoutChecker {
 
     final ticketType = ticketData['券種']?.toString() ?? '通常';
     final multi = ticketData['マルチ']?.toString() == 'あり';
-    final combinations = _expandCombinations(
+    final combinations = expandCombinations(
       ticketType: ticketType,
       betType: normalizedBetType,
       purchase: purchase,
@@ -66,7 +97,65 @@ class TicketPayoutChecker {
     );
   }
 
-  static Set<String> _expandCombinations({
+  /// 購入内容1件の点数・合計金額を計算する
+  static PurchaseStakeSummary summarizePurchase(
+    Map ticketData,
+    Map purchase,
+  ) {
+    final unitAmount = _asInt(purchase['購入金額']) ?? 0;
+    final betTypeRaw = purchase['式別']?.toString() ?? '';
+    final betType = betTypeRaw == '馬番連単' ? '馬単' : betTypeRaw;
+    final ticketType = ticketData['券種']?.toString() ?? '通常';
+    final multi = ticketData['マルチ']?.toString() == 'あり';
+
+    final combinations = expandCombinations(
+      ticketType: ticketType,
+      betType: betType,
+      purchase: purchase,
+      multi: multi,
+    );
+
+    // クイックピックは券面の組合せ数を優先（展開不能時のフォールバックにも使う）
+    final declaredCount = _asInt(ticketData['組合せ数']);
+    var count = combinations.length;
+    if (count == 0 && ticketType == 'クイックピック' && declaredCount != null) {
+      count = declaredCount;
+    }
+    if (count == 0 && unitAmount > 0) {
+      count = 1;
+    }
+
+    return PurchaseStakeSummary(
+      combinationCount: count,
+      unitAmountYen: unitAmount,
+      totalAmountYen: unitAmount * count,
+    );
+  }
+
+  /// 馬券全体の点数・合計金額を計算する
+  static TicketStakeSummary summarizeTicket(Map ticketData) {
+    final purchases = ticketData['購入内容'];
+    final summaries = <PurchaseStakeSummary>[];
+    if (purchases is List) {
+      for (final item in purchases) {
+        if (item is Map) {
+          summaries.add(summarizePurchase(ticketData, item));
+        }
+      }
+    }
+
+    return TicketStakeSummary(
+      purchases: summaries,
+      totalCombinationCount: summaries.fold(
+        0,
+        (sum, s) => sum + s.combinationCount,
+      ),
+      totalAmountYen: summaries.fold(0, (sum, s) => sum + s.totalAmountYen),
+    );
+  }
+
+  /// 購入内容から照合用の組合せキー集合を展開する
+  static Set<String> expandCombinations({
     required String ticketType,
     required String betType,
     required Map purchase,
@@ -205,13 +294,27 @@ class TicketPayoutChecker {
         return _expandAxisOneNagashi(axis, partners, ordered: false);
       case '馬単':
         if (nagashi.contains('1着')) {
-          return _expandAxisOneNagashi(axis, partners, ordered: true, axisFirst: true);
+          return _expandAxisOneNagashi(
+            axis,
+            partners,
+            ordered: true,
+            axisFirst: true,
+          );
         }
         if (nagashi.contains('2着')) {
-          return _expandAxisOneNagashi(axis, partners, ordered: true, axisFirst: false);
+          return _expandAxisOneNagashi(
+            axis,
+            partners,
+            ordered: true,
+            axisFirst: false,
+          );
         }
-        // 軸が複数ある場合など
-        return _expandAxisOneNagashi(axis, partners, ordered: true, axisFirst: true);
+        return _expandAxisOneNagashi(
+          axis,
+          partners,
+          ordered: true,
+          axisFirst: true,
+        );
       case '3連複':
         if (nagashi.contains('軸2頭')) {
           final axes = _asIntList(axis);
@@ -249,7 +352,8 @@ class TicketPayoutChecker {
     if (axes.isEmpty || partners.length < 2) return {};
     final keys = <String>{};
     for (final a in axes) {
-      for (final pair in _combinations(partners.where((p) => p != a).toList(), 2)) {
+      for (final pair
+          in _combinations(partners.where((p) => p != a).toList(), 2)) {
         keys.add(
           RaceResultFetcher.keyFromNumbers([a, ...pair], ordered: false),
         );
@@ -275,17 +379,22 @@ class TicketPayoutChecker {
     List<List<int>> slots,
     bool multi,
   ) {
-    // 3連単ながしは 馬番 が着順ごとのリストになることが多い
-    if (slots.length >= 3) {
-      final keys = _expandFormation(slots, 3, true);
-      if (multi) {
-        // マルチ: 着順スロットの順列も追加
-        final all = slots.expand((e) => e).toSet().toList()..sort();
-        keys.addAll(_expandBox(all, 3, true));
+    if (slots.length < 3) return {};
+
+    // まずは着順スロットどおりの基本組合せを展開する
+    final base = _expandFormation(slots, 3, true);
+    if (!multi) return base;
+
+    // マルチ: 基本組合せごとの3頭について、着順の全順列 (3! = 6通り) を追加する
+    // 例: 1・2着ながしで相手2頭 → 2点 × 6 = 12点
+    final keys = <String>{};
+    for (final key in base) {
+      final nums = key.split('>').map(int.parse).toList();
+      for (final perm in _permutations(nums)) {
+        keys.add(RaceResultFetcher.keyFromNumbers(perm, ordered: true));
       }
-      return keys;
     }
-    return {};
+    return keys;
   }
 
   static int? _combinationSize(String betType) {
@@ -327,7 +436,7 @@ class TicketPayoutChecker {
     if (value.first is List) {
       return value.map(_asIntList).toList();
     }
-    return [ _asIntList(value) ];
+    return [_asIntList(value)];
   }
 
   static Iterable<List<int>> _combinations(List<int> items, int r) sync* {
