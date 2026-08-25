@@ -14,6 +14,20 @@ class PayoutEntry {
     required this.combinationLabel,
     required this.payoutPer100Yen,
   });
+
+  factory PayoutEntry.fromJson(Map<String, dynamic> json) {
+    return PayoutEntry(
+      combinationKey: json['combinationKey'] as String,
+      combinationLabel: json['combinationLabel'] as String,
+      payoutPer100Yen: json['payoutPer100Yen'] as int,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'combinationKey': combinationKey,
+        'combinationLabel': combinationLabel,
+        'payoutPer100Yen': payoutPer100Yen,
+      };
 }
 
 /// レース結果（払戻）
@@ -47,6 +61,60 @@ class RaceResult {
     this.raceName,
     this.raceDateLabel,
   });
+
+  factory RaceResult.fromJson(Map<String, dynamic> json) {
+    final payoutsRaw = json['payoutsByBetType'] as Map? ?? {};
+    final payoutsByBetType = <String, List<PayoutEntry>>{
+      for (final entry in payoutsRaw.entries)
+        entry.key.toString(): [
+          for (final item in (entry.value as List? ?? const []))
+            if (item is Map)
+              PayoutEntry.fromJson(Map<String, dynamic>.from(item)),
+        ],
+    };
+
+    final namesRaw = json['horseNamesByNumber'] as Map? ?? {};
+    final framesRaw = json['frameByHorseNumber'] as Map? ?? {};
+
+    return RaceResult(
+      url: json['url'] as String,
+      payoutsByBetType: payoutsByBetType,
+      hasResults: json['hasResults'] as bool? ?? payoutsByBetType.isNotEmpty,
+      horseNamesByNumber: {
+        for (final entry in namesRaw.entries)
+          int.parse(entry.key.toString()): entry.value.toString(),
+      },
+      frameByHorseNumber: {
+        for (final entry in framesRaw.entries)
+          int.parse(entry.key.toString()): entry.value is int
+              ? entry.value as int
+              : int.parse(entry.value.toString()),
+      },
+      fieldSize: json['fieldSize'] as int?,
+      raceName: json['raceName'] as String?,
+      raceDateLabel: json['raceDateLabel'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'url': url,
+        'payoutsByBetType': {
+          for (final entry in payoutsByBetType.entries)
+            entry.key: [for (final p in entry.value) p.toJson()],
+        },
+        'hasResults': hasResults,
+        'horseNamesByNumber': {
+          for (final entry in horseNamesByNumber.entries)
+            entry.key.toString(): entry.value,
+        },
+        'frameByHorseNumber': {
+          for (final entry in frameByHorseNumber.entries)
+            entry.key.toString(): entry.value,
+        },
+        'fieldSize': fieldSize,
+        'raceName': raceName,
+        'raceDateLabel': raceDateLabel,
+      };
 
   List<PayoutEntry> payoutsFor(String betType) =>
       payoutsByBetType[betType] ?? const [];

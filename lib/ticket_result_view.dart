@@ -174,7 +174,7 @@ class _TicketResultViewState extends State<TicketResultView> {
     }
   }
 
-  Future<void> _loadRaceResult() async {
+  Future<void> _loadRaceResult({bool forceRefresh = false}) async {
     final url = _effectiveUrl;
     if (url == null || url.isEmpty) return;
 
@@ -184,7 +184,10 @@ class _TicketResultViewState extends State<TicketResultView> {
     });
 
     try {
-      final result = await RaceResultFetcher.fetch(url);
+      final result = await RaceResultFetcher.fetch(
+        url,
+        forceRefresh: forceRefresh,
+      );
       if (!mounted) return;
 
       final purchases = data['購入内容'];
@@ -333,7 +336,7 @@ class _TicketResultViewState extends State<TicketResultView> {
                           if (_effectiveUrl == null) {
                             await _resolveLocalUrlIfNeeded();
                           } else {
-                            await _loadRaceResult();
+                            await _loadRaceResult(forceRefresh: true);
                           }
                         },
                   icon: const Icon(Icons.refresh),

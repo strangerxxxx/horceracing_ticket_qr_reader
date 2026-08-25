@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 
 import 'bet_type.dart';
 import 'race_result.dart';
+import 'race_result_cache.dart';
 
 /// `race_table_01` のパース結果
 class RaceTableInfo {
@@ -43,7 +44,15 @@ class RaceResultFetcher {
     'santan': '三連単',
   };
 
-  static Future<RaceResult> fetch(String url) async {
+  static Future<RaceResult> fetch(
+    String url, {
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cached = await RaceResultCache.read(url);
+      if (cached != null) return cached;
+    }
+
     final response = await http.get(
       Uri.parse(url),
       headers: {'User-Agent': _userAgent},
@@ -55,7 +64,13 @@ class RaceResultFetcher {
 
     // netkeiba は EUC-JP。馬名表示のため正しくデコードする。
     final html = const EucJPCodec(true).decode(response.bodyBytes);
-    return parseHtml(html, url);
+    final result = parseHtml(html, url);
+    try {
+      await RaceResultCache.write(url, result);
+    } catch (_) {
+      // キャッシュ失敗しても表示は続行する
+    }
+    return result;
   }
 
   /// テスト・デバッグ用に公開
