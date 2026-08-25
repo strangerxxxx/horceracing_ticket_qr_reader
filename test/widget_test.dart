@@ -9,7 +9,11 @@ void main() {
 
     expect(find.text('馬券QRリーダー'), findsOneWidget);
     expect(find.text('QRコード読み取り'), findsOneWidget);
-    expect(find.text('QRコードを読み取ってください'), findsOneWidget);
+    expect(find.text('続けて読む'), findsOneWidget);
+    expect(
+      find.textContaining('馬券のQRコードは2枚あります'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('A11yLabeledRow exposes combined semantics label', (

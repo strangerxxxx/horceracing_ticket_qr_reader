@@ -17,13 +17,14 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: '馬券QRリーダー',
       home: const MyHomePage(),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [Locale("ja", "JP")],
+      supportedLocales: const [Locale('ja', 'JP')],
       theme: ThemeData(
         brightness: Brightness.light,
         primarySwatch: Colors.green,
@@ -52,20 +53,44 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   Map<String, dynamic>? parsedResult;
   String? _currentHistoryId;
+  bool _continuousMode = false;
 
-  void _openQRScanner({bool openGalleryOnStart = false}) async {
+  Future<void> _handleParsedTicket(Map<String, dynamic> result) async {
+    if (result.containsKey('エラー')) {
+      setState(() {
+        parsedResult = result;
+        _currentHistoryId = null;
+      });
+      return;
+    }
+
+    final id = await ScanHistoryService.add(result);
+    if (!mounted) return;
+    setState(() {
+      parsedResult = result;
+      _currentHistoryId = id;
+    });
+  }
+
+  Future<void> _openQRScanner({bool openGalleryOnStart = false}) async {
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
-        builder: (_) => QRScannerPage(openGalleryOnStart: openGalleryOnStart),
+        builder: (_) => QRScannerPage(
+          openGalleryOnStart: openGalleryOnStart,
+          continuousMode: _continuousMode,
+          onTicketParsed: _continuousMode
+              ? (data) {
+                  _handleParsedTicket(data);
+                }
+              : null,
+        ),
       ),
     );
 
+    if (!mounted) return;
+
     if (result != null) {
-      final id = await ScanHistoryService.add(result);
-      setState(() {
-        parsedResult = result;
-        _currentHistoryId = id;
-      });
+      await _handleParsedTicket(result);
     }
   }
 
@@ -79,7 +104,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("馬券QRリーダー"),
+        title: const Text('馬券QRリーダー'),
         actions: [
           IconButton(
             icon: const Icon(Icons.history),
@@ -97,7 +122,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () => _openQRScanner(),
-                    child: const Text("QRコード読み取り"),
+                    child: const Text('QRコード読み取り'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -105,12 +130,19 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: OutlinedButton.icon(
                     onPressed: () => _openQRScanner(openGalleryOnStart: true),
                     icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text("画像から読み取り"),
+                    label: const Text('画像から読み取り'),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('続けて読む'),
+              subtitle: const Text('読み取り後もスキャナを閉じず、次の馬券を続けて読めます'),
+              value: _continuousMode,
+              onChanged: (value) => setState(() => _continuousMode = value),
+            ),
+            const SizedBox(height: 8),
             Expanded(
               child: SingleChildScrollView(
                 child: parsedResult != null
@@ -120,17 +152,54 @@ class _MyHomePageState extends State<MyHomePage> {
                         onDataUpdated: (updated) {
                           setState(() => parsedResult = updated);
                         },
+                        onRescan: () => _openQRScanner(),
                       )
-                    : Center(
-                        child: A11yStatusMessage(
-                          'QRコードを読み取ってください',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                          liveRegion: false,
-                        ),
+                    : _HomeEmptyState(
+                        onScan: () => _openQRScanner(),
+                        onPickImage: () =>
+                            _openQRScanner(openGalleryOnStart: true),
                       ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeEmptyState extends StatelessWidget {
+  final VoidCallback onScan;
+  final VoidCallback onPickImage;
+
+  const _HomeEmptyState({
+    required this.onScan,
+    required this.onPickImage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            A11yStatusMessage(
+              '馬券のQRコードは2枚あります。両方をカメラでかざすか、'
+              '2枚が写った画像を選んでください。',
+              style: TextStyle(color: muted, height: 1.5),
+              liveRegion: false,
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: onScan,
+              child: const Text('カメラで読み取る'),
+            ),
+            TextButton(
+              onPressed: onPickImage,
+              child: const Text('画像から読み取る'),
             ),
           ],
         ),

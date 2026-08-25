@@ -37,12 +37,14 @@ class TicketResultView extends StatefulWidget {
   final Map<String, dynamic> data;
   final String? historyEntryId;
   final ValueChanged<Map<String, dynamic>>? onDataUpdated;
+  final VoidCallback? onRescan;
 
   const TicketResultView({
     super.key,
     required this.data,
     this.historyEntryId,
     this.onDataUpdated,
+    this.onRescan,
   });
 
   @override
@@ -302,6 +304,14 @@ class _TicketResultViewState extends State<TicketResultView> {
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onErrorContainer,
                   ),
+                ),
+              ],
+              if (widget.onRescan != null) ...[
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: widget.onRescan,
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('もう一度読み取る'),
                 ),
               ],
             ],
