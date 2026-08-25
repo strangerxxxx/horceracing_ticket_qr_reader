@@ -31,6 +31,12 @@ class RaceResult {
   /// 出走頭数（結果表から判明した最大馬番。不明時は null）
   final int? fieldSize;
 
+  /// レース名（例: プリンシパルS(L)）
+  final String? raceName;
+
+  /// 開催年月日の表示用（例: 2025年5月4日）
+  final String? raceDateLabel;
+
   const RaceResult({
     required this.url,
     required this.payoutsByBetType,
@@ -38,6 +44,8 @@ class RaceResult {
     this.horseNamesByNumber = const {},
     this.frameByHorseNumber = const {},
     this.fieldSize,
+    this.raceName,
+    this.raceDateLabel,
   });
 
   List<PayoutEntry> payoutsFor(String betType) =>

@@ -5,6 +5,15 @@ import 'package:horceracing_ticket_qr_reader/ticket_payout_checker.dart';
 void main() {
   const sampleHtml = '''
 <html><body>
+<div class="data_intro">
+<dl class="racedata fc">
+<dt>11 R</dt>
+<dd>
+<h1>プリンシパルS(L)<!-- comment --></h1>
+</dd>
+</dl>
+<p class="smalltxt">2025年05月04日 2回東京4日目 3歳オープン&nbsp;&nbsp;(国際)(指)(馬齢)</p>
+</div>
 <table class="race_table_01 nk_tb_common">
 <tr><th>着</th><th>枠</th><th>馬番</th><th>馬名</th></tr>
 <tr>
@@ -102,6 +111,16 @@ void main() {
     expect(result.frameByHorseNumber[2], 1);
     expect(result.frameByHorseNumber[1], 3);
     expect(result.fieldSize, 12);
+  });
+
+  test('parseHtml extracts race name and date', () {
+    final result = RaceResultFetcher.parseHtml(
+      sampleHtml,
+      'https://db.netkeiba.com/race/202505020411',
+    );
+
+    expect(result.raceName, 'プリンシパルS(L)');
+    expect(result.raceDateLabel, '2025年5月4日');
   });
 
   test('checkPurchase detects win and loss', () {

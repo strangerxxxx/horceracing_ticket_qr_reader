@@ -23,13 +23,14 @@ class ScanHistoryService {
       ..sort((a, b) => b.scannedAt.compareTo(a.scannedAt));
   }
 
-  static Future<void> add(Map<String, dynamic> data) async {
+  static Future<String> add(Map<String, dynamic> data) async {
     final entries = await load();
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
 
     entries.insert(
       0,
       ScanHistoryEntry(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        id: id,
         scannedAt: DateTime.now(),
         data: data,
       ),
@@ -39,6 +40,23 @@ class ScanHistoryService {
       entries.removeRange(_maxEntries, entries.length);
     }
 
+    await _writeEntries(entries);
+    return id;
+  }
+
+  static Future<void> updateData(String id, Map<String, dynamic> patch) async {
+    if (patch.isEmpty) return;
+
+    final entries = await load();
+    final index = entries.indexWhere((e) => e.id == id);
+    if (index < 0) return;
+
+    final current = entries[index];
+    entries[index] = ScanHistoryEntry(
+      id: current.id,
+      scannedAt: current.scannedAt,
+      data: {...current.data, ...patch},
+    );
     await _writeEntries(entries);
   }
 

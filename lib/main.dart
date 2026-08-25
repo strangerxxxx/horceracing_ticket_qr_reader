@@ -51,6 +51,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   Map<String, dynamic>? parsedResult;
+  String? _currentHistoryId;
 
   void _openQRScanner({bool openGalleryOnStart = false}) async {
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
@@ -60,9 +61,10 @@ class _MyHomePageState extends State<MyHomePage> {
     );
 
     if (result != null) {
-      await ScanHistoryService.add(result);
+      final id = await ScanHistoryService.add(result);
       setState(() {
         parsedResult = result;
+        _currentHistoryId = id;
       });
     }
   }
@@ -112,7 +114,13 @@ class _MyHomePageState extends State<MyHomePage> {
             Expanded(
               child: SingleChildScrollView(
                 child: parsedResult != null
-                    ? TicketResultView(data: parsedResult!)
+                    ? TicketResultView(
+                        data: parsedResult!,
+                        historyEntryId: _currentHistoryId,
+                        onDataUpdated: (updated) {
+                          setState(() => parsedResult = updated);
+                        },
+                      )
                     : Center(
                         child: A11yStatusMessage(
                           'QRコードを読み取ってください',

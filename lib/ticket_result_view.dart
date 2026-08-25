@@ -8,6 +8,7 @@ import 'local_race_url.dart';
 import 'netkeiba_urls.dart';
 import 'race_result.dart';
 import 'race_result_fetcher.dart';
+import 'scan_history_service.dart';
 import 'ticket_payout_checker.dart';
 
 /// 金額を3桁カンマ区切りで表示する
@@ -34,8 +35,15 @@ int? _asInt(dynamic value) {
 }
 class TicketResultView extends StatefulWidget {
   final Map<String, dynamic> data;
+  final String? historyEntryId;
+  final ValueChanged<Map<String, dynamic>>? onDataUpdated;
 
-  const TicketResultView({super.key, required this.data});
+  const TicketResultView({
+    super.key,
+    required this.data,
+    this.historyEntryId,
+    this.onDataUpdated,
+  });
 
   @override
   State<TicketResultView> createState() => _TicketResultViewState();
@@ -54,6 +62,32 @@ class _TicketResultViewState extends State<TicketResultView> {
 
   String? get _effectiveUrl =>
       _resolvedUrl ?? data['URL']?.toString();
+
+  bool get _canFetchRaceMeta {
+    if (data.containsKey('エラー')) return false;
+    if (data['URL'] != null) return true;
+
+    return data['場コード']?.toString() != null &&
+        data['開催場']?.toString() != null &&
+        _asInt(data['年']) != null &&
+        _asInt(data['回']) != null &&
+        _asInt(data['日']) != null &&
+        _asInt(data['レース']) != null;
+  }
+
+  bool get _isFetchingRaceMeta => _loading || _resolvingUrl;
+
+  String? _raceMetaDisplayValue(String? fromResult, String? fromData) {
+    if (fromResult != null && fromResult.isNotEmpty) return fromResult;
+    if (fromData != null && fromData.isNotEmpty) return fromData;
+    if (!_canFetchRaceMeta) return null;
+    if (_isFetchingRaceMeta) return '取得中 ...';
+    if (_error != null || _urlResolveError != null) {
+      return '取得できませんでした';
+    }
+    if (_raceResult != null) return null;
+    return '取得中 ...';
+  }
 
   @override
   void initState() {
@@ -172,6 +206,7 @@ class _TicketResultViewState extends State<TicketResultView> {
         _checkResults = checks;
         _loading = false;
       });
+      await _persistRaceMeta(result);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -179,6 +214,34 @@ class _TicketResultViewState extends State<TicketResultView> {
         _error = 'レース結果の取得に失敗しました';
       });
     }
+  }
+
+  Future<void> _persistRaceMeta(RaceResult result) async {
+    final updates = <String, dynamic>{};
+
+    final raceName = result.raceName;
+    if (raceName != null &&
+        raceName.isNotEmpty &&
+        data['レース名']?.toString() != raceName) {
+      updates['レース名'] = raceName;
+    }
+
+    final raceDateLabel = result.raceDateLabel;
+    if (raceDateLabel != null &&
+        raceDateLabel.isNotEmpty &&
+        data['開催日']?.toString() != raceDateLabel) {
+      updates['開催日'] = raceDateLabel;
+    }
+
+    if (updates.isEmpty) return;
+
+    final historyEntryId = widget.historyEntryId;
+    if (historyEntryId != null) {
+      await ScanHistoryService.updateData(historyEntryId, updates);
+    }
+
+    if (!mounted) return;
+    widget.onDataUpdated?.call({...data, ...updates});
   }
 
   @override
@@ -552,6 +615,15 @@ class _TicketResultViewState extends State<TicketResultView> {
         '$yearLabel 第${data['回']}回 第${data['日']}日 ${data['レース']}R',
       );
     }
+
+    addRow('開催日', _raceMetaDisplayValue(
+      _raceResult?.raceDateLabel,
+      data['開催日']?.toString(),
+    ));
+    addRow('レース名', _raceMetaDisplayValue(
+      _raceResult?.raceName,
+      data['レース名']?.toString(),
+    ));
 
     addRow('開催種別', data['開催種別']);
     addRow('券種', data['券種']);
@@ -1007,7 +1079,7 @@ class _HitBadge extends StatelessWidget {
     } else {
       bg = Theme.of(context).colorScheme.surfaceContainerHighest;
       fg = Theme.of(context).colorScheme.onSurfaceVariant;
-      label = '外れ';
+      label = 'はずれ';
     }
 
     final semanticLabel = result.hit && result.matchedLabels.isNotEmpty

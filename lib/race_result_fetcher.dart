@@ -17,6 +17,14 @@ class RaceTableInfo {
   });
 }
 
+/// レース名・開催日のパース結果
+class RaceMetaInfo {
+  final String? raceName;
+  final String? raceDateLabel;
+
+  const RaceMetaInfo({this.raceName, this.raceDateLabel});
+}
+
 /// netkeiba のレース結果ページから払戻を取得する
 class RaceResultFetcher {
   static const _userAgent =
@@ -53,6 +61,7 @@ class RaceResultFetcher {
   /// テスト・デバッグ用に公開
   static RaceResult parseHtml(String html, String url) {
     final table = parseRaceTable(html);
+    final meta = parseRaceMeta(html);
 
     final payBlockMatch = RegExp(
       r'class="pay_block"[\s\S]*?</dl>',
@@ -67,6 +76,8 @@ class RaceResultFetcher {
         horseNamesByNumber: table.horseNamesByNumber,
         frameByHorseNumber: table.frameByHorseNumber,
         fieldSize: table.fieldSize,
+        raceName: meta.raceName,
+        raceDateLabel: meta.raceDateLabel,
       );
     }
 
@@ -120,7 +131,49 @@ class RaceResultFetcher {
       horseNamesByNumber: table.horseNamesByNumber,
       frameByHorseNumber: table.frameByHorseNumber,
       fieldSize: table.fieldSize,
+      raceName: meta.raceName,
+      raceDateLabel: meta.raceDateLabel,
     );
+  }
+
+  /// レース名・開催年月日を読む
+  static RaceMetaInfo parseRaceMeta(String html) {
+    String? raceName;
+    final nameMatch = RegExp(
+      r'class="racedata[^"]*"[\s\S]*?<dd>[\s\S]*?<h1>([\s\S]*?)</h1>',
+      caseSensitive: false,
+    ).firstMatch(html);
+    if (nameMatch != null) {
+      final name = _normalizeSpaces(
+        _stripTags(nameMatch.group(1)!.replaceAll(RegExp(r'<!--[\s\S]*?-->'), '')),
+      );
+      if (name.isNotEmpty) raceName = name;
+    }
+
+    String? raceDateLabel;
+    final smallMatch = RegExp(
+      r'class="smalltxt"[^>]*>([\s\S]*?)</p>',
+      caseSensitive: false,
+    ).firstMatch(html);
+    if (smallMatch != null) {
+      final small = _normalizeSpaces(
+        _stripTags(
+          smallMatch
+              .group(1)!
+              .replaceAll('&nbsp;', ' ')
+              .replaceAll(RegExp(r'&#\d+;'), ' '),
+        ),
+      );
+      final dateMatch = RegExp(r'(\d{4})年(\d{1,2})月(\d{1,2})日').firstMatch(small);
+      if (dateMatch != null) {
+        final y = int.parse(dateMatch.group(1)!);
+        final m = int.parse(dateMatch.group(2)!);
+        final d = int.parse(dateMatch.group(3)!);
+        raceDateLabel = '$y年$m月$d日';
+      }
+    }
+
+    return RaceMetaInfo(raceName: raceName, raceDateLabel: raceDateLabel);
   }
 
   /// `race_table_01` から馬番・枠番・馬名を読む

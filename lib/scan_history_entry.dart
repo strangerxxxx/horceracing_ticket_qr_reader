@@ -31,8 +31,14 @@ class ScanHistoryEntry {
 
     final venue = data['開催場']?.toString() ?? '';
     final race = data['レース'];
-    if (venue.isNotEmpty && race != null) return '$venue ${race}R';
-    if (venue.isNotEmpty) return venue;
+    final raceName = data['レース名']?.toString();
+
+    final parts = <String>[];
+    if (venue.isNotEmpty) parts.add(venue);
+    if (race != null) parts.add('${race}R');
+    if (raceName != null && raceName.isNotEmpty) parts.add(raceName);
+
+    if (parts.isNotEmpty) return parts.join(' ');
     return '読み取り結果';
   }
 

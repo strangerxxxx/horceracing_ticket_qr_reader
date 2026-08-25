@@ -67,18 +67,20 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   void _openDetail(ScanHistoryEntry entry) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => HistoryDetailPage(
-          entry: entry,
-          onDeleted: () {
-            setState(() {
-              _entries.removeWhere((e) => e.id == entry.id);
-            });
-          },
-        ),
-      ),
-    );
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => HistoryDetailPage(
+              entry: entry,
+              onDeleted: () {
+                setState(() {
+                  _entries.removeWhere((e) => e.id == entry.id);
+                });
+              },
+            ),
+          ),
+        )
+        .then((_) => _load());
   }
 
   @override
@@ -145,7 +147,7 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 }
 
-class HistoryDetailPage extends StatelessWidget {
+class HistoryDetailPage extends StatefulWidget {
   final ScanHistoryEntry entry;
   final VoidCallback onDeleted;
 
@@ -154,6 +156,19 @@ class HistoryDetailPage extends StatelessWidget {
     required this.entry,
     required this.onDeleted,
   });
+
+  @override
+  State<HistoryDetailPage> createState() => _HistoryDetailPageState();
+}
+
+class _HistoryDetailPageState extends State<HistoryDetailPage> {
+  late Map<String, dynamic> _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _data = Map<String, dynamic>.from(widget.entry.data);
+  }
 
   Future<void> _delete(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -176,8 +191,8 @@ class HistoryDetailPage extends StatelessWidget {
 
     if (confirmed != true || !context.mounted) return;
 
-    await ScanHistoryService.delete(entry.id);
-    onDeleted();
+    await ScanHistoryService.delete(widget.entry.id);
+    widget.onDeleted();
     if (context.mounted) Navigator.pop(context);
   }
 
@@ -185,7 +200,7 @@ class HistoryDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(entry.title),
+        title: Text(widget.entry.title),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -200,13 +215,19 @@ class HistoryDetailPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '読み取り日時: ${entry.scannedAtLabel}',
+              '読み取り日時: ${widget.entry.scannedAtLabel}',
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 16),
-            TicketResultView(data: entry.data),
+            TicketResultView(
+              data: _data,
+              historyEntryId: widget.entry.id,
+              onDataUpdated: (updated) {
+                setState(() => _data = updated);
+              },
+            ),
           ],
         ),
       ),
