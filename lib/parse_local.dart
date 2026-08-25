@@ -153,12 +153,13 @@ const Map<String, String> wheelExactaDict = {"1": "1着ながし", "2": "2着な
 
 const Map<String, String> wheelTrioDict = {"3": "軸2頭ながし", "7": "軸1頭ながし"};
 
+/// 地方競馬の3連単ながしコード（JRAの wheelTrifectaDict とは異なる）
 const Map<String, String> wheelTrifectaDict = {
-  "1": "1・2着ながし",
-  "2": "1・3着ながし",
-  "3": "2・3着ながし",
-  "4": "1着ながし",
-  "5": "2着ながし",
+  "1": "1着ながし",
+  "2": "2着ながし",
+  "3": "1・2着ながし",
+  "4": "2・3着ながし",
+  "5": "1・3着ながし",
   "6": "3着ながし",
 };
 
@@ -202,6 +203,19 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
   d["回"] = int.parse(time);
   d["日"] = int.parse(day);
   d["レース"] = int.parse(itr.next() + itr.next());
+
+  // 地方発売のJRA馬券は netkeiba 中央URLを直接組み立てる（年は令和年度）
+  if (_isJraRacecourse(racecourseCode)) {
+    final reiwaYear = d["年"] as int;
+    final yyyy = reiwaYear <= 40 ? reiwaYear + 2018 : 2000 + reiwaYear;
+    final id =
+        '$yyyy'
+        '${racecourseCode.padLeft(2, '0')}'
+        '${(d["回"] as int).toString().padLeft(2, '0')}'
+        '${(d["日"] as int).toString().padLeft(2, '0')}'
+        '${(d["レース"] as int).toString().padLeft(2, '0')}';
+    d["URL"] = "https://db.netkeiba.com/race/$id";
+  }
 
   String typeCode = itr.next();
   d["券種"] = typeDict[typeCode];
@@ -250,6 +264,7 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
             count = 1;
             break;
           case "3":
+          case "4":
           case "5":
           case "6":
           case "7":
@@ -263,22 +278,28 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
             throw ArgumentError("Unexpected betting_code: $bettingCode");
         }
         int c = (int.parse(ticketFormat) + 1) ~/ 2;
-        if ((bettingCode == "3" || bettingCode == "5") && ticketFormat == "3") {
+        // フォーマット3は単勝・複勝・枠連・馬連の馬番欄が広い
+        if (ticketFormat == "3" &&
+            (bettingCode == "1" ||
+                bettingCode == "2" ||
+                bettingCode == "3" ||
+                bettingCode == "5")) {
           c += 1;
         }
-        di["馬番"] = [
-          for (int i = 0; i < count; i++) int.parse(itr.next() + itr.next()),
+        // 馬番欄はフォーマット幅 c スロット（余りは00）。
+        // 馬番連単(6)と必要頭数が c を超える式別は実頭数ぶんだけ読む。
+        final slotCount =
+            (bettingCode == "6" || count > c || typeCode == "5") ? count : c;
+        final slotNumbers = [
+          for (int i = 0; i < slotCount; i++) int.parse(itr.next() + itr.next()),
         ];
-        if (c > count && typeCode != "5" && bettingCode != "6") {
-          itr.move((c - count) * 2);
+        di["馬番"] = slotNumbers.take(count).toList();
+
+        // 「ウラ」はフォーマット1の単勝・複勝のみ（馬番連単には無い）
+        if ((bettingCode == "1" || bettingCode == "2") && ticketFormat == "1") {
+          itr.move(2);
         }
 
-        if (bettingCode == "1" || bettingCode == "2" || bettingCode == "6") {
-          String ura = itr.next() + itr.next();
-          if (bettingCode == "6") {
-            di["ウラ"] = ura == "01" ? "あり" : "なし";
-          }
-        }
         String purchaseAmountStr = "";
         for (int i = 0; i < 5; i++) {
           purchaseAmountStr += itr.next();
@@ -414,9 +435,6 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
         }
       }
       underDigits[5] = bettingCode;
-      if (bettingCode == "6" || bettingCode == "8" || bettingCode == "9") {
-        underDigits[7] = wheelCode;
-      }
       (d["購入内容"] as List).add(di);
       break;
 
@@ -501,6 +519,11 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
 
   d["下端番号"] = joinWithSpaces(underDigits);
   return d;
+}
+
+bool _isJraRacecourse(String code) {
+  final n = int.tryParse(code);
+  return n != null && n >= 1 && n <= 10;
 }
 
 String joinWithSpaces(List<String> underDigits) {
