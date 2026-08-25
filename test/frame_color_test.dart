@@ -56,4 +56,19 @@ void main() {
       5,
     );
   });
+
+  test('numberBadgeSemanticLabel describes frame color', () {
+    expect(
+      numberBadgeSemanticLabel(number: 7, frameNumber: null, numberIsFrame: false),
+      '馬番7、枠番未確定',
+    );
+    expect(
+      numberBadgeSemanticLabel(number: 3, frameNumber: 3, numberIsFrame: true),
+      '枠番3、3枠赤',
+    );
+    expect(
+      numberBadgeSemanticLabel(number: 12, frameNumber: 2, numberIsFrame: false),
+      '馬番12、2枠黒',
+    );
+  });
 }

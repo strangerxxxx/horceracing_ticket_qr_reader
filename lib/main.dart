@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+
+import 'a11y_widgets.dart';
 import 'history_page.dart';
 import 'qr_scanner_page.dart';
 import 'scan_history_service.dart';
@@ -112,11 +114,12 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: parsedResult != null
                     ? TicketResultView(data: parsedResult!)
                     : Center(
-                        child: Text(
+                        child: A11yStatusMessage(
                           'QRコードを読み取ってください',
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
+                          liveRegion: false,
                         ),
                       ),
               ),

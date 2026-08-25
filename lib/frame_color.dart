@@ -125,16 +125,32 @@ int? resolveFrameNumber({
   return null;
 }
 
+/// スクリーンリーダー向けの馬番・枠番ラベル
+String numberBadgeSemanticLabel({
+  required int number,
+  required int? frameNumber,
+  required bool numberIsFrame,
+}) {
+  final kind = numberIsFrame ? '枠番' : '馬番';
+  if (frameNumber == null) {
+    return '$kind$number、枠番未確定';
+  }
+  final style = frameStyleFor(frameNumber);
+  return '$kind$number、$frameNumber枠${style.label}';
+}
+
 /// 馬番・枠番を枠色の四角で表示する。
 class NumberBadge extends StatelessWidget {
   final int number;
   final int? frameNumber;
+  final bool numberIsFrame;
   final double size;
 
   const NumberBadge({
     super.key,
     required this.number,
     required this.frameNumber,
+    this.numberIsFrame = false,
     this.size = 22,
   });
 
@@ -143,26 +159,36 @@ class NumberBadge extends StatelessWidget {
     final style = frameStyleFor(frameNumber);
     final needsBorder =
         style.frameNumber == 1 || style.color.computeLuminance() > 0.85;
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    final badgeSize = (size * textScale).clamp(size, size * 2);
 
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: style.color,
-        border: Border.all(
-          color: needsBorder ? const Color(0xFF333333) : style.color,
-          width: 1,
-        ),
-        borderRadius: BorderRadius.circular(3),
+    return Semantics(
+      label: numberBadgeSemanticLabel(
+        number: number,
+        frameNumber: frameNumber,
+        numberIsFrame: numberIsFrame,
       ),
-      child: Text(
-        '$number',
-        style: TextStyle(
-          color: style.textColor,
-          fontSize: size * 0.55,
-          fontWeight: FontWeight.bold,
-          height: 1,
+      excludeSemantics: true,
+      child: Container(
+        width: badgeSize,
+        height: badgeSize,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: style.color,
+          border: Border.all(
+            color: needsBorder ? const Color(0xFF333333) : style.color,
+            width: 1,
+          ),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Text(
+          '$number',
+          style: TextStyle(
+            color: style.textColor,
+            fontSize: badgeSize * 0.55,
+            fontWeight: FontWeight.bold,
+            height: 1,
+          ),
         ),
       ),
     );

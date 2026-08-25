@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'a11y_widgets.dart';
 import 'bet_type.dart';
 import 'external_url.dart';
 import 'frame_color.dart';
@@ -209,30 +210,36 @@ class _TicketResultViewState extends State<TicketResultView> {
   }
 
   Widget _buildError(BuildContext context) {
-    return Card(
-      color: Theme.of(context).colorScheme.errorContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              data['エラー'].toString(),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onErrorContainer,
-              ),
-            ),
-            if (data['詳細'] != null) ...[
-              const SizedBox(height: 8),
+    final message = data['エラー'].toString();
+    final detail = data['詳細']?.toString();
+    return Semantics(
+      liveRegion: true,
+      label: detail == null ? message : '$message。$detail',
+      child: Card(
+        color: Theme.of(context).colorScheme.errorContainer,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                data['詳細'].toString(),
+                message,
                 style: TextStyle(
+                  fontWeight: FontWeight.bold,
                   color: Theme.of(context).colorScheme.onErrorContainer,
                 ),
               ),
+              if (detail != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  detail,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -248,7 +255,7 @@ class _TicketResultViewState extends State<TicketResultView> {
             Row(
               children: [
                 Expanded(
-                  child: Text(
+                  child: A11ySectionTitle(
                     '的中判定',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
@@ -272,44 +279,34 @@ class _TicketResultViewState extends State<TicketResultView> {
             ),
             const Divider(),
             if (_resolvingUrl)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  children: [
-                    Center(child: CircularProgressIndicator()),
-                    SizedBox(height: 8),
-                    Text('開催日を特定しています…'),
-                  ],
-                ),
-              )
+              const A11yLoadingIndicator(message: '開催日を特定しています…')
             else if (_urlResolveError != null && _effectiveUrl == null)
-              Text(
+              A11yStatusMessage(
                 _urlResolveError!,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               )
             else if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(child: CircularProgressIndicator()),
-              )
+              const A11yLoadingIndicator(message: 'レース結果を取得しています…')
             else if (_error != null)
-              Text(
+              A11yStatusMessage(
                 _error!,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               )
             else if (_raceResult == null)
-              Text(
+              A11yStatusMessage(
                 'レース結果を取得していません',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
+                liveRegion: false,
               )
             else if (!_raceResult!.hasResults)
-              Text(
+              A11yStatusMessage(
                 'レース結果がまだ公開されていません',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
+                liveRegion: false,
               )
             else ...[
               _buildOverallSummary(context),
@@ -328,30 +325,33 @@ class _TicketResultViewState extends State<TicketResultView> {
     final totalPayout = valid.fold<int>(0, (sum, r) => sum + r.payoutYen);
     final stake = TicketPayoutChecker.summarizeTicket(data);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          hits > 0 ? '的中あり（$hits件）' : '的中なし',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: hits > 0
-                ? Colors.red.shade700
-                : Theme.of(context).colorScheme.onSurfaceVariant,
+    return Semantics(
+      label: hits > 0 ? '的中あり、$hits件' : '的中なし',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            hits > 0 ? '的中あり（$hits件）' : '的中なし',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: hits > 0
+                  ? Colors.red.shade700
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        _InfoRow(label: '組合せ', value: '${stake.totalCombinationCount}点'),
-        _InfoRow(label: '購入合計', value: _formatYen(stake.totalAmountYen)),
-        _InfoRow(label: '払戻合計', value: _formatYen(totalPayout)),
-        _InfoRow(
-          label: '収支',
-          value: _formatYen(
-            totalPayout - stake.totalAmountYen,
-            showSign: true,
+          const SizedBox(height: 8),
+          _InfoRow(label: '組合せ', value: '${stake.totalCombinationCount}点'),
+          _InfoRow(label: '購入合計', value: _formatYen(stake.totalAmountYen)),
+          _InfoRow(label: '払戻合計', value: _formatYen(totalPayout)),
+          _InfoRow(
+            label: '収支',
+            value: _formatYen(
+              totalPayout - stake.totalAmountYen,
+              showSign: true,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -365,7 +365,7 @@ class _TicketResultViewState extends State<TicketResultView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        A11ySectionTitle(
           '公式払戻（購入した式別）',
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.bold,
@@ -399,21 +399,26 @@ class _TicketResultViewState extends State<TicketResultView> {
         for (final payout in payouts)
           Padding(
             padding: const EdgeInsets.only(left: 8, bottom: 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: _buildPayoutCombination(
-                    payout.combinationKey,
-                    betType,
+            child: MergeSemantics(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: _buildPayoutCombination(
+                      payout.combinationKey,
+                      betType,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _formatYen(payout.payoutPer100Yen),
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Semantics(
+                    label: '払戻 ${_formatYen(payout.payoutPer100Yen)}',
+                    child: Text(
+                      _formatYen(payout.payoutPer100Yen),
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
       ],
@@ -541,7 +546,7 @@ class _TicketResultViewState extends State<TicketResultView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            A11ySectionTitle(
               title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
@@ -569,7 +574,7 @@ class _TicketResultViewState extends State<TicketResultView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            A11ySectionTitle(
               '購入内容',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
@@ -715,7 +720,11 @@ class _TicketResultViewState extends State<TicketResultView> {
       frameByHorseNumber: _raceResult?.frameByHorseNumber,
       fieldSize: _raceResult?.fieldSize,
     );
-    return NumberBadge(number: number, frameNumber: frame);
+    return NumberBadge(
+      number: number,
+      frameNumber: frame,
+      numberIsFrame: numberIsFrame,
+    );
   }
 
   int? _asHorseNumber(dynamic value) {
@@ -922,8 +931,7 @@ class _TicketResultViewState extends State<TicketResultView> {
       runSpacing: 4,
       children: [
         for (var i = 0; i < parts.length; i++) ...[
-          if (i > 0 && separator.isNotEmpty)
-            Text(separator, style: const TextStyle(fontWeight: FontWeight.w500)),
+          if (i > 0 && separator.isNotEmpty) A11ySeparatorText(separator),
           parts[i],
         ],
       ],
@@ -958,28 +966,39 @@ class _HitBadge extends StatelessWidget {
       label = '外れ';
     }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(color: fg, fontWeight: FontWeight.bold),
-          ),
-          if (result.hit && result.matchedLabels.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              '的中組合せ: ${result.matchedLabels.join(' / ')}',
-              style: TextStyle(color: fg, fontSize: 12),
+    final semanticLabel = result.hit && result.matchedLabels.isNotEmpty
+        ? '$label。的中組合せ ${result.matchedLabels.join(' / ')}'
+        : label;
+
+    return Semantics(
+      label: semanticLabel,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ExcludeSemantics(
+              child: Text(
+                label,
+                style: TextStyle(color: fg, fontWeight: FontWeight.bold),
+              ),
             ),
+            if (result.hit && result.matchedLabels.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              ExcludeSemantics(
+                child: Text(
+                  '的中組合せ: ${result.matchedLabels.join(' / ')}',
+                  style: TextStyle(color: fg, fontSize: 12),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -999,29 +1018,10 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          Expanded(
-            child: valueWidget ??
-                Text(
-                  value ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-          ),
-        ],
-      ),
+    return A11yLabeledRow(
+      label: label,
+      value: value,
+      valueWidget: valueWidget,
     );
   }
 }
@@ -1030,6 +1030,16 @@ class _UrlRow extends StatelessWidget {
   final String url;
 
   const _UrlRow({required this.url});
+
+  String _linkLabel(String url) {
+    if (url.contains('race.netkeiba.com')) {
+      return '中央競馬の結果ページをブラウザで開く';
+    }
+    if (url.contains('nar.netkeiba.com')) {
+      return '地方競馬の結果ページをブラウザで開く';
+    }
+    return 'レース結果データベースをブラウザで開く';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1048,16 +1058,10 @@ class _UrlRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: InkWell(
+            child: A11yLinkText(
+              label: _linkLabel(url),
+              url: url,
               onTap: () => openExternalUrl(url),
-              child: Text(
-                url,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
-                  decoration: TextDecoration.underline,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
             ),
           ),
         ],

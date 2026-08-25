@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:horceracing_ticket_qr_reader/a11y_widgets.dart';
 import 'package:horceracing_ticket_qr_reader/parse.dart';
 import 'package:horceracing_ticket_qr_reader/parse_local.dart';
 
@@ -202,17 +203,21 @@ class _QRScannerPageState extends State<QRScannerPage> {
             onDetect: _onDetect,
           ),
           if (_qrResults.length == 1)
-            const Align(
+            Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
-                padding: EdgeInsets.only(bottom: 48.0),
-                child: Card(
-                  color: Colors.black54,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    child: Text(
-                      '1枚目を読み取りました。2枚目をかざすか、画像を選んでください。',
-                      style: TextStyle(color: Colors.white),
+                padding: const EdgeInsets.only(bottom: 48.0),
+                child: Semantics(
+                  liveRegion: true,
+                  label: '1枚目を読み取りました。2枚目をかざすか、画像を選んでください。',
+                  child: const Card(
+                    color: Colors.black54,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      child: Text(
+                        '1枚目を読み取りました。2枚目をかざすか、画像を選んでください。',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
                   ),
                 ),
@@ -221,7 +226,9 @@ class _QRScannerPageState extends State<QRScannerPage> {
           if (_analyzingImage)
             const ColoredBox(
               color: Colors.black45,
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(
+                child: A11yLoadingIndicator(message: '画像を解析しています…'),
+              ),
             ),
         ],
       ),

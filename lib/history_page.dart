@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'a11y_widgets.dart';
 import 'scan_history_entry.dart';
 import 'scan_history_service.dart';
 import 'ticket_result_view.dart';
@@ -95,14 +96,17 @@ class _HistoryPageState extends State<HistoryPage> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: A11yLoadingIndicator(message: '履歴を読み込んでいます…'),
+            )
           : _entries.isEmpty
           ? Center(
-              child: Text(
+              child: A11yStatusMessage(
                 '履歴はありません',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
+                liveRegion: false,
               ),
             )
           : ListView.separated(
@@ -110,26 +114,29 @@ class _HistoryPageState extends State<HistoryPage> {
               separatorBuilder: (context, index) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final entry = _entries[index];
-                return Dismissible(
-                  key: ValueKey(entry.id),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    color: Theme.of(context).colorScheme.error,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 16),
-                    child: Icon(
-                      Icons.delete,
-                      color: Theme.of(context).colorScheme.onError,
+                return Semantics(
+                  hint: '左にスワイプして削除できます',
+                  child: Dismissible(
+                    key: ValueKey(entry.id),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      color: Theme.of(context).colorScheme.error,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 16),
+                      child: Icon(
+                        Icons.delete,
+                        color: Theme.of(context).colorScheme.onError,
+                      ),
                     ),
-                  ),
-                  onDismissed: (_) => _deleteEntry(entry),
-                  child: ListTile(
-                    title: Text(entry.title),
-                    subtitle: Text(
-                      '${entry.subtitle}\n${entry.scannedAtLabel}',
+                    onDismissed: (_) => _deleteEntry(entry),
+                    child: ListTile(
+                      title: Text(entry.title),
+                      subtitle: Text(
+                        '${entry.subtitle}\n${entry.scannedAtLabel}',
+                      ),
+                      isThreeLine: true,
+                      onTap: () => _openDetail(entry),
                     ),
-                    isThreeLine: true,
-                    onTap: () => _openDetail(entry),
                   ),
                 );
               },
