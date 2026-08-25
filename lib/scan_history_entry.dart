@@ -1,3 +1,5 @@
+import 'local_race_url.dart';
+
 /// 読み取り履歴の1件分
 class ScanHistoryEntry {
   final String id;
@@ -43,8 +45,10 @@ class ScanHistoryEntry {
 
     if (data['年'] != null) {
       final year = data['年'];
-      final yearStr = year is int && year < 100 ? '20$year' : year.toString();
-      parts.add('$yearStr年 第${data['回']}回 第${data['日']}日');
+      final yearStr = year is int
+          ? LocalRaceUrlResolver.formatYearLabelForTicket(data, year)
+          : '$year年';
+      parts.add('$yearStr 第${data['回']}回 第${data['日']}日');
     }
     if (data['券種'] != null) {
       parts.add(data['券種'].toString());

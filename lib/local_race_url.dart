@@ -19,8 +19,42 @@ class LocalRaceUrlResolver {
     '(\\d+)\xB2\xF3[\\x00-\\xFF]{0,60}?(\\d+)\xC6\xFC\xCC\xDC',
   );
 
-  /// 地方馬券の「年」は令和の年度として扱う（1〜40）。それ以外は西暦下2桁。
-  static bool isReiwaFiscalYear(int year) => year >= 1 && year <= 40;
+  /// 地方馬券の「年」が令和の年度か（1〜18。19以降は平成と衝突するため除外）。
+  static bool isReiwaFiscalYear(int year) => year >= 1 && year <= 18;
+
+  /// 地方馬券の「年」が平成か（19〜31）。
+  static bool isHeiseiYear(int year) => year >= 19 && year <= 31;
+
+  /// 券面の年コードを西暦年に変換する（令和年度・平成・西暦下2桁）。
+  static int toWesternYear(int year) {
+    if (isReiwaFiscalYear(year)) return year + 2018;
+    if (isHeiseiYear(year)) return year + 1988;
+    if (year < 100) return 2000 + year;
+    return year;
+  }
+
+  /// 券面の年コードの表示用ラベル（地方: 令和7年度 / 平成28年度、それ以外: 2028年）。
+  static String formatTicketYearLabel(int year) {
+    if (isReiwaFiscalYear(year)) return '令和$year年度';
+    if (isHeiseiYear(year)) return '平成$year年度';
+    if (year < 100) return '${2000 + year}年';
+    return '$year年';
+  }
+
+  /// JRA（中央）券面の年コード表示。西暦下2桁 → `2026年`。
+  static String formatJraTicketYearLabel(int year) {
+    if (year < 100) return '${2000 + year}年';
+    return '$year年';
+  }
+
+  /// パース結果に応じた年ラベル（地方フォーマットは元号、JRAは西暦4桁）。
+  static String formatYearLabelForTicket(Map data, int year) {
+    // 地方パーサのみ「場コード」を付ける
+    if (data.containsKey('場コード')) {
+      return formatTicketYearLabel(year);
+    }
+    return formatJraTicketYearLabel(year);
+  }
 
   static Future<String?> resolve({
     required String racecourseCode,
@@ -76,7 +110,8 @@ class LocalRaceUrlResolver {
   }
 
   /// 令和N年度 → 西暦 (N+2018)年4月 〜 (N+2019)年3月。
-  /// 西暦下2桁の場合はその年の1〜12月。
+  /// 平成N年 → 西暦 (N+1988)年の1〜12月。
+  /// それ以外の2桁は西暦下2桁。
   static List<(int, int)> _candidateMonths(int year) {
     if (isReiwaFiscalYear(year)) {
       final startYear = year + 2018;
@@ -84,6 +119,10 @@ class LocalRaceUrlResolver {
         for (var m = 4; m <= 12; m++) (startYear, m),
         for (var m = 1; m <= 3; m++) (startYear + 1, m),
       ];
+    }
+    if (isHeiseiYear(year)) {
+      final western = year + 1988;
+      return [for (var m = 1; m <= 12; m++) (western, m)];
     }
     final western = year < 100 ? 2000 + year : year;
     return [for (var m = 1; m <= 12; m++) (western, m)];

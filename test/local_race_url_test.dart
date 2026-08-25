@@ -30,7 +30,49 @@ void main() {
   test('isReiwaFiscalYear treats small years as Reiwa fiscal year', () {
     expect(LocalRaceUrlResolver.isReiwaFiscalYear(7), isTrue);
     expect(LocalRaceUrlResolver.isReiwaFiscalYear(1), isTrue);
+    expect(LocalRaceUrlResolver.isReiwaFiscalYear(18), isTrue);
+    expect(LocalRaceUrlResolver.isReiwaFiscalYear(19), isFalse);
     expect(LocalRaceUrlResolver.isReiwaFiscalYear(41), isFalse);
+  });
+
+  test('isHeiseiYear treats 19-31 as Heisei', () {
+    expect(LocalRaceUrlResolver.isHeiseiYear(29), isTrue);
+    expect(LocalRaceUrlResolver.isHeiseiYear(19), isTrue);
+    expect(LocalRaceUrlResolver.isHeiseiYear(18), isFalse);
+    expect(LocalRaceUrlResolver.isHeiseiYear(32), isFalse);
+  });
+
+  test('formatTicketYearLabel distinguishes Reiwa and Heisei', () {
+    expect(LocalRaceUrlResolver.formatTicketYearLabel(7), '令和7年度');
+    expect(LocalRaceUrlResolver.formatTicketYearLabel(28), '平成28年度');
+    expect(LocalRaceUrlResolver.toWesternYear(28), 2016);
+  });
+
+  test('formatJraTicketYearLabel uses western 4-digit year', () {
+    expect(LocalRaceUrlResolver.formatJraTicketYearLabel(26), '2026年');
+    expect(LocalRaceUrlResolver.formatJraTicketYearLabel(7), '2007年');
+    expect(LocalRaceUrlResolver.formatJraTicketYearLabel(2026), '2026年');
+  });
+
+  test('formatYearLabelForTicket picks JRA vs local by 場コード', () {
+    expect(
+      LocalRaceUrlResolver.formatYearLabelForTicket({'年': 26}, 26),
+      '2026年',
+    );
+    expect(
+      LocalRaceUrlResolver.formatYearLabelForTicket(
+        {'年': 7, '場コード': '03'},
+        7,
+      ),
+      '令和7年度',
+    );
+    expect(
+      LocalRaceUrlResolver.formatYearLabelForTicket(
+        {'年': 28, '場コード': '36'},
+        28,
+      ),
+      '平成28年',
+    );
   });
 
   test('parseRoundDayFromHtmlBytes reads EUC-JP 回/日目', () {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'bet_type.dart';
 import 'external_url.dart';
 import 'local_race_url.dart';
+import 'netkeiba_urls.dart';
 import 'race_result.dart';
 import 'race_result_fetcher.dart';
 import 'ticket_payout_checker.dart';
@@ -436,9 +437,7 @@ class _TicketResultViewState extends State<TicketResultView> {
       final year = _asInt(data['年']);
       final yearLabel = year == null
           ? data['年'].toString()
-          : (LocalRaceUrlResolver.isReiwaFiscalYear(year) && data['場コード'] != null
-              ? '令和$year年度'
-              : (year < 100 ? '20$year年' : '$year年'));
+          : LocalRaceUrlResolver.formatYearLabelForTicket(data, year);
       addRow(
         '開催',
         '$yearLabel 第${data['回']}回 第${data['日']}日 ${data['レース']}R',

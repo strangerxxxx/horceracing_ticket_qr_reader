@@ -204,10 +204,12 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
   d["日"] = int.parse(day);
   d["レース"] = int.parse(itr.next() + itr.next());
 
-  // 地方発売のJRA馬券は netkeiba 中央URLを直接組み立てる（年は令和年度）
+  // 地方発売のJRA馬券は netkeiba 中央URLを直接組み立てる
   if (_isJraRacecourse(racecourseCode)) {
-    final reiwaYear = d["年"] as int;
-    final yyyy = reiwaYear <= 40 ? reiwaYear + 2018 : 2000 + reiwaYear;
+    final ticketYear = d["年"] as int;
+    final yyyy = ticketYear <= 18
+        ? ticketYear + 2018
+        : (ticketYear <= 31 ? ticketYear + 1988 : 2000 + ticketYear);
     final id =
         '$yyyy'
         '${racecourseCode.padLeft(2, '0')}'
