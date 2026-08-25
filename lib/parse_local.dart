@@ -398,7 +398,7 @@ Map<String, dynamic> parseHorseracingTicketQrLocal(String s) {
         di["相手"] = innerList;
         count = innerList.length;
       }
-      if (bettingCode == "8" || bettingCode == "9") {
+      if (bettingCode == "6" || bettingCode == "8" || bettingCode == "9") {
         String purchaseAmountStr = "";
         for (int i = 0; i < 5; i++) {
           purchaseAmountStr += itr.next();
