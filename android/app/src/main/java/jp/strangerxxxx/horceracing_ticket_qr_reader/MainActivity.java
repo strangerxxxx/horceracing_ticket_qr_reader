@@ -1,4 +1,4 @@
-package com.example.horceracing_ticket_qr_reader;
+package jp.strangerxxxx.horceracing_ticket_qr_reader;
 
 import android.content.Intent;
 import android.net.Uri;

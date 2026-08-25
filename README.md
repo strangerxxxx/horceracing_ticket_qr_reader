@@ -28,6 +28,28 @@ apk ファイルへのビルドもできます。
 flutter build apk --release
 ```
 
+Play 向けの App Bundle は次です。
+
+```bash
+flutter build appbundle --release
+```
+
+### リリース署名（Play Console）
+
+1. アップロード用キーストアを作成する（未作成の場合）:
+
+```bash
+keytool -genkey -v -keystore android/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+2. `android/key.properties.example` を `android/key.properties` にコピーし、パスワード等を記入する。  
+   `key.properties` と `*.jks` / `*.keystore` は Git 管理外です。
+
+3. `flutter build appbundle --release` で署名付き AAB を出力する。
+
+applicationId / Bundle ID は `jp.strangerxxxx.horceracing_ticket_qr_reader`（iOS は `jp.strangerxxxx.horceracingTicketQrReader`）です。  
+既存インストールからの移行時は ID 変更により別アプリ扱いになる点に注意してください。
+
 ## おことわり
 
 当然ながら JRA が QR コードの仕様を公開しているわけではないため、正しく表示されるとは限りません。バグも多いと思います。  

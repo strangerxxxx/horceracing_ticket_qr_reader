@@ -8,7 +8,7 @@
 PRODUCT_NAME = horceracing_ticket_qr_reader
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.horceracingTicketQrReader
+PRODUCT_BUNDLE_IDENTIFIER = jp.strangerxxxx.horceracingTicketQrReader
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2025 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2025 strangerxxxx. All rights reserved.

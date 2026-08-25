@@ -1,8 +1,10 @@
 import 'package:app_settings/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'a11y_widgets.dart';
+import 'app_theme.dart';
 import 'history_page.dart';
 import 'image_ticket_reader.dart';
 import 'paste_ticket_page.dart';
@@ -28,20 +30,8 @@ class MyApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('ja', 'JP')],
-      theme: ThemeData(
-        brightness: Brightness.light,
-        primarySwatch: Colors.green,
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.black,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-        ),
-        textTheme: const TextTheme(bodyMedium: TextStyle(color: Colors.white)),
-        colorScheme: const ColorScheme.dark(primary: Colors.green),
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       themeMode: ThemeMode.system,
     );
   }
@@ -192,11 +182,18 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  void _showAbout() {
+  Future<void> _showAbout() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+
+    final versionLabel = info.buildNumber.isEmpty
+        ? info.version
+        : '${info.version} (${info.buildNumber})';
+
     showAboutDialog(
       context: context,
       applicationName: '馬券QRリーダー',
-      applicationVersion: '0.5.0',
+      applicationVersion: versionLabel,
       applicationLegalese: 'MIT License',
       children: const [
         SizedBox(height: 16),
