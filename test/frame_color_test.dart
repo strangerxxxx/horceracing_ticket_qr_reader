@@ -71,4 +71,21 @@ void main() {
       '馬番12、2枠黒',
     );
   });
+
+  testWidgets('frame 2 uses white border in dark mode', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(brightness: Brightness.dark),
+        home: const Scaffold(
+          body: NumberBadge(number: 5, frameNumber: 2),
+        ),
+      ),
+    );
+
+    final decoration = tester.widget<Container>(find.byType(Container)).decoration
+        as BoxDecoration;
+    expect(decoration.border?.top.color, Colors.white);
+  });
 }

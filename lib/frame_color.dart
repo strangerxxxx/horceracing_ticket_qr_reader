@@ -139,6 +139,18 @@ String numberBadgeSemanticLabel({
   return '$kind$number、$frameNumber枠${style.label}';
 }
 
+/// 枠色バッジの枠線色（1枠・淡色は濃い線、2枠はダークモードで白線）
+Color frameBadgeBorderColor(BuildContext context, FrameStyle style) {
+  if (style.frameNumber == 1 || style.color.computeLuminance() > 0.85) {
+    return const Color(0xFF333333);
+  }
+  if (style.frameNumber == 2 &&
+      Theme.of(context).brightness == Brightness.dark) {
+    return Colors.white;
+  }
+  return style.color;
+}
+
 /// 馬番・枠番を枠色の四角で表示する。
 class NumberBadge extends StatelessWidget {
   final int number;
@@ -157,8 +169,7 @@ class NumberBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = frameStyleFor(frameNumber);
-    final needsBorder =
-        style.frameNumber == 1 || style.color.computeLuminance() > 0.85;
+    final borderColor = frameBadgeBorderColor(context, style);
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     final badgeSize = (size * textScale).clamp(size, size * 2);
 
@@ -176,7 +187,7 @@ class NumberBadge extends StatelessWidget {
         decoration: BoxDecoration(
           color: style.color,
           border: Border.all(
-            color: needsBorder ? const Color(0xFF333333) : style.color,
+            color: borderColor,
             width: 1,
           ),
           borderRadius: BorderRadius.circular(3),
