@@ -9,6 +9,7 @@ import 'history_page.dart';
 import 'image_ticket_reader.dart';
 import 'paste_ticket_page.dart';
 import 'qr_scanner_page.dart';
+import 'scan_history_entry.dart';
 import 'scan_history_service.dart';
 import 'ticket_result_view.dart';
 
@@ -77,8 +78,8 @@ class _MyHomePageState extends State<MyHomePage> {
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
         builder: (_) => QRScannerPage(
-          onTicketParsed: (data) {
-            _handleParsedTicket(data);
+          onTicketParsed: (data) async {
+            await _handleParsedTicket(data);
           },
         ),
       ),
@@ -176,10 +177,43 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  void _openHistory() {
-    Navigator.of(context).push(
+  void _openHistory() async {
+    await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const HistoryPage()),
     );
+    if (!mounted) return;
+    await _syncHomeWithHistory();
+  }
+
+  /// 履歴での削除・払戻更新をホーム表示へ反映する
+  Future<void> _syncHomeWithHistory() async {
+    final id = _currentHistoryId;
+    if (id == null) return;
+
+    try {
+      final entries = await ScanHistoryService.load();
+      ScanHistoryEntry? found;
+      for (final entry in entries) {
+        if (entry.id == id) {
+          found = entry;
+          break;
+        }
+      }
+      if (!mounted) return;
+      final matched = found;
+      if (matched == null) {
+        setState(() {
+          parsedResult = null;
+          _currentHistoryId = null;
+        });
+      } else {
+        setState(() {
+          parsedResult = Map<String, dynamic>.from(matched.data);
+        });
+      }
+    } catch (_) {
+      // 同期失敗時はホームの表示を維持
+    }
   }
 
   Future<void> _showAbout() async {

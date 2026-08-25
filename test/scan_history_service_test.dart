@@ -109,6 +109,21 @@ void main() {
     expect(entries, isEmpty);
   });
 
+  test('restore puts deleted entry back with same id', () async {
+    final id = await ScanHistoryService.add({'開催場': '東京', 'レース': 7});
+    final original =
+        (await ScanHistoryService.load()).singleWhere((e) => e.id == id);
+
+    await ScanHistoryService.delete(id);
+    expect(await ScanHistoryService.load(), isEmpty);
+
+    await ScanHistoryService.restore(original);
+    final restored = await ScanHistoryService.load();
+    expect(restored, hasLength(1));
+    expect(restored.single.id, id);
+    expect(restored.single.data['レース'], 7);
+  });
+
   test('round-trips nested formation horse numbers', () async {
     final id = await ScanHistoryService.add({
       '開催場': '大井',

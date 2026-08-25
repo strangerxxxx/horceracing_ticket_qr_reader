@@ -7,11 +7,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'a11y_widgets.dart';
+import 'scan_history_entry.dart';
+import 'ticket_payout_checker.dart';
 import 'ticket_qr_parse.dart';
+import 'ticket_result_view.dart';
 
 class QRScannerPage extends StatefulWidget {
   /// 続けて読むモードで解析成功したときに呼ばれる
-  final ValueChanged<Map<String, dynamic>>? onTicketParsed;
+  final Future<void> Function(Map<String, dynamic> data)? onTicketParsed;
 
   const QRScannerPage({
     super.key,
@@ -33,6 +36,10 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   /// 直前に成功したQR。枠から外れるまで再読取しない
   final Set<String> _blockedQrs = {};
+
+  /// 続けて読むで直近に成功した馬券（画面上で確認用）
+  Map<String, dynamic>? _lastContinuousTicket;
+  int _continuousSuccessCount = 0;
 
   final MobileScannerController _controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.normal,
@@ -281,12 +288,17 @@ class _QRScannerPageState extends State<QRScannerPage> {
     }
 
     if (_continuousMode) {
-      widget.onTicketParsed?.call(parsedData);
+      await widget.onTicketParsed?.call(parsedData);
+      if (!mounted) return;
       _blockedQrs
         ..clear()
         ..add(first)
         ..add(second);
       _scanPausedUntil = DateTime.now().add(_continuousCooldown);
+      setState(() {
+        _lastContinuousTicket = parsedData;
+        _continuousSuccessCount += 1;
+      });
       _showMessage('読み取りました。次の馬券をかざしてください');
       _resetScan();
       return;
@@ -324,6 +336,139 @@ class _QRScannerPageState extends State<QRScannerPage> {
     } else {
       Navigator.of(context).pop();
     }
+  }
+
+  Widget _buildContinuousResultBanner() {
+    final data = _lastContinuousTicket;
+    if (!_continuousMode || data == null) {
+      return const SizedBox.shrink();
+    }
+
+    final entry = ScanHistoryEntry(
+      id: 'preview',
+      scannedAt: DateTime.now(),
+      data: data,
+    );
+    final stake = TicketPayoutChecker.summarizeTicket(data);
+    final purchase = _formatYen(stake.totalAmountYen);
+
+    return Align(
+      alignment: Alignment.topCenter,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(12),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _showContinuousTicketDetail(data),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '読み取り完了（$_continuousSuccessCount枚目）',
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                          Text(
+                            entry.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            '${entry.subtitle.isEmpty ? '詳細を表示' : entry.subtitle} · 購入 $purchase',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _showContinuousTicketDetail(data),
+                      child: const Text('詳細'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showContinuousTicketDetail(Map<String, dynamic> data) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        final height = MediaQuery.sizeOf(context).height * 0.75;
+        return SafeArea(
+          child: SizedBox(
+            height: height,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '直前の読み取り結果',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '閉じる',
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: TicketResultView(data: data),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatYen(int amount) {
+    final digits = amount.abs().toString();
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+      buffer.write(digits[i]);
+    }
+    return '$buffer円';
   }
 
   Widget _buildCameraError(BuildContext context, MobileScannerException error) {
@@ -503,6 +648,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
               onDetect: _onDetect,
               errorBuilder: _buildCameraError,
             ),
+            _buildContinuousResultBanner(),
             _buildStatusBanner(),
             if (_analyzingImage)
               const ColoredBox(

@@ -144,6 +144,20 @@ class ScanHistoryService {
     });
   }
 
+  /// スワイプ削除の Undo 用。同一 id があれば置換、なければ先頭に戻す。
+  static Future<void> restore(ScanHistoryEntry entry) {
+    return _synchronized(() async {
+      final entries = await _loadUnlocked();
+      entries.removeWhere((e) => e.id == entry.id);
+      entries.insert(0, entry);
+      entries.sort((a, b) => b.scannedAt.compareTo(a.scannedAt));
+      if (entries.length > _maxEntries) {
+        entries.removeRange(_maxEntries, entries.length);
+      }
+      await _writeEntriesUnlocked(entries);
+    });
+  }
+
   static Future<void> clear() {
     return _synchronized(() async {
       final file = await _historyFile();

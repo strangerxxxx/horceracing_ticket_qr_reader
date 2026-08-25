@@ -65,12 +65,33 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _deleteEntry(ScanHistoryEntry entry) async {
+    final index = _allEntries.indexWhere((e) => e.id == entry.id);
+    if (index < 0) return;
+
+    setState(() {
+      _allEntries.removeAt(index);
+    });
     await ScanHistoryService.delete(entry.id);
-    if (mounted) {
-      setState(() {
-        _allEntries.removeWhere((e) => e.id == entry.id);
-      });
-    }
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('「${entry.title}」を削除しました'),
+        action: SnackBarAction(
+          label: '元に戻す',
+          onPressed: () async {
+            await ScanHistoryService.restore(entry);
+            if (!mounted) return;
+            setState(() {
+              final insertAt = index.clamp(0, _allEntries.length);
+              _allEntries.insert(insertAt, entry);
+            });
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _clearAll() async {
@@ -262,7 +283,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           itemBuilder: (context, index) {
                             final entry = visible[index];
                             return Semantics(
-                              hint: '左にスワイプして削除できます',
+                              hint: '左にスワイプして削除できます。削除後は元に戻せます',
                               child: Dismissible(
                                 key: ValueKey(entry.id),
                                 direction: DismissDirection.endToStart,
