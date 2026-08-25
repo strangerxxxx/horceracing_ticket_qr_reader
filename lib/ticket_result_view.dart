@@ -217,7 +217,7 @@ class _TicketResultViewState extends State<TicketResultView> {
         _checkResults = checks;
         _loading = false;
       });
-      await _persistRaceMeta(result);
+      await _persistRaceMeta(result, checks);
     } on HttpFetchException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -233,7 +233,10 @@ class _TicketResultViewState extends State<TicketResultView> {
     }
   }
 
-  Future<void> _persistRaceMeta(RaceResult result) async {
+  Future<void> _persistRaceMeta(
+    RaceResult result,
+    List<PurchaseCheckResult?> checks,
+  ) async {
     final updates = <String, dynamic>{};
 
     final raceName = result.raceName;
@@ -250,15 +253,37 @@ class _TicketResultViewState extends State<TicketResultView> {
       updates['開催日'] = raceDateLabel;
     }
 
-    if (updates.isEmpty) return;
+    final stake = TicketPayoutChecker.summarizeTicket(ticket);
+    updates['購入合計'] = stake.totalAmountYen;
+
+    final removeKeys = <String>[];
+    if (result.hasResults) {
+      final valid = checks.whereType<PurchaseCheckResult>().toList();
+      final hits = valid.where((r) => r.hit).length;
+      final totalPayout = valid.fold<int>(0, (sum, r) => sum + r.payoutYen);
+      updates['払戻合計'] = totalPayout;
+      updates['的中件数'] = hits;
+      updates['結果取得済'] = true;
+    } else {
+      updates['結果取得済'] = false;
+      removeKeys.addAll(['払戻合計', '的中件数']);
+    }
 
     final historyEntryId = widget.historyEntryId;
     if (historyEntryId != null) {
-      await ScanHistoryService.updateData(historyEntryId, updates);
+      await ScanHistoryService.updateData(
+        historyEntryId,
+        updates,
+        removeKeys: removeKeys,
+      );
     }
 
     if (!mounted) return;
-    widget.onDataUpdated?.call({...data, ...updates});
+    final merged = {...data, ...updates};
+    for (final key in removeKeys) {
+      merged.remove(key);
+    }
+    widget.onDataUpdated?.call(merged);
   }
 
   @override

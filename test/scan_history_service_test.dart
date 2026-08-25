@@ -137,4 +137,23 @@ void main() {
     ]);
     expect(entry.ticket.purchases.single.numbers!.isNested, isTrue);
   });
+
+  test('add replaces duplicate ticket keeping latest only', () async {
+    await ScanHistoryService.add({
+      'QR': 'dup-qr',
+      '開催場': '東京',
+      'レース': 1,
+      '購入合計': 100,
+    });
+    await ScanHistoryService.add({
+      'QR': 'dup-qr',
+      '開催場': '東京',
+      'レース': 1,
+      '購入合計': 200,
+    });
+
+    final entries = await ScanHistoryService.load();
+    expect(entries, hasLength(1));
+    expect(entries.single.data['購入合計'], 200);
+  });
 }
