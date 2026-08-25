@@ -21,8 +21,9 @@ void main() {
   ) async {
     await tester.pumpWidget(const MyApp());
 
-    expect(find.byType(ElevatedButton), findsNWidgets(2));
-    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.byType(ElevatedButton), findsNWidgets(3));
+    expect(find.byIcon(Icons.content_paste), findsOneWidget);
+    expect(find.text('文字列を貼り付けて解析'), findsNothing);
   });
 
   testWidgets('A11yLabeledRow exposes combined semantics label', (

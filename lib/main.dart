@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'a11y_widgets.dart';
 import 'history_page.dart';
 import 'image_ticket_reader.dart';
+import 'paste_ticket_page.dart';
 import 'qr_scanner_page.dart';
 import 'scan_history_service.dart';
 import 'ticket_result_view.dart';
@@ -72,6 +73,14 @@ class _MyHomePageState extends State<MyHomePage> {
       parsedResult = result;
       _currentHistoryId = id;
     });
+  }
+
+  Future<void> _openPasteTicket() async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(builder: (_) => const PasteTicketPage()),
+    );
+    if (!mounted || result == null) return;
+    await _handleParsedTicket(result);
   }
 
   Future<void> _openQRScanner() async {
@@ -267,6 +276,24 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 4),
+                Semantics(
+                  button: true,
+                  label: '文字列を貼り付けて解析',
+                  hint: 'QRの生データを貼り付けて馬券内容を解析します',
+                  child: Tooltip(
+                    message: '文字列を貼り付けて解析',
+                    child: ElevatedButton(
+                      onPressed: _openPasteTicket,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                        padding: EdgeInsets.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Icon(Icons.content_paste),
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -318,7 +345,8 @@ class _HomeEmptyState extends StatelessWidget {
           children: [
             A11yStatusMessage(
               '馬券のQRコードは2枚あります。両方をカメラでかざすか、'
-              '2枚が写った画像を選んでください。長押しで複数画像も選べます。',
+              '2枚が写った画像を選んでください。長押しで複数画像も選べます。'
+              '「画像から読み取り」右のクリップボードから文字列の貼り付け解析もできます。',
               style: TextStyle(color: muted, height: 1.5),
               liveRegion: true,
             ),
