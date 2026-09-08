@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 void main() {
   tearDown(() {
     HttpFetch.debugGet = null;
+    HttpFetch.debugPost = null;
   });
 
   test('HttpFetch maps TimeoutException to user message', () async {
@@ -17,6 +18,25 @@ void main() {
 
     expect(
       () => HttpFetch.get(Uri.parse('https://example.com')),
+      throwsA(
+        isA<HttpFetchException>().having(
+          (e) => e.message,
+          'message',
+          '接続がタイムアウトしました',
+        ),
+      ),
+    );
+  });
+
+  test('HttpFetch.post maps TimeoutException to user message', () async {
+    HttpFetch.debugPost = (uri, {headers, body}) =>
+        Future.error(TimeoutException('slow'));
+
+    expect(
+      () => HttpFetch.post(
+        Uri.parse('https://example.com'),
+        body: {'cname': 'x'},
+      ),
       throwsA(
         isA<HttpFetchException>().having(
           (e) => e.message,

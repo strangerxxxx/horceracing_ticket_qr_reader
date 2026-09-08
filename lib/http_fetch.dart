@@ -13,7 +13,7 @@ class HttpFetchException implements Exception {
   String toString() => message;
 }
 
-/// タイムアウト付き HTTP GET
+/// タイムアウト付き HTTP GET / POST
 class HttpFetch {
   static const timeout = Duration(seconds: 20);
   static const userAgent =
@@ -22,6 +22,13 @@ class HttpFetch {
   /// テスト差し替え用
   static Future<http.Response> Function(Uri uri, {Map<String, String>? headers})?
       debugGet;
+
+  /// テスト差し替え用（form body は Map）
+  static Future<http.Response> Function(
+    Uri uri, {
+    Map<String, String>? headers,
+    Map<String, String>? body,
+  })? debugPost;
 
   static Future<http.Response> get(Uri uri) async {
     try {
@@ -32,6 +39,34 @@ class HttpFetch {
           : await http
               .get(uri, headers: {'User-Agent': userAgent})
               .timeout(timeout);
+      return response;
+    } on TimeoutException {
+      throw const HttpFetchException('接続がタイムアウトしました');
+    } on SocketException {
+      throw const HttpFetchException('ネットワークに接続できません');
+    } on HttpFetchException {
+      rethrow;
+    } on http.ClientException {
+      throw const HttpFetchException('通信に失敗しました');
+    } catch (_) {
+      throw const HttpFetchException('通信に失敗しました');
+    }
+  }
+
+  /// `application/x-www-form-urlencoded` の POST
+  static Future<http.Response> post(
+    Uri uri, {
+    Map<String, String>? body,
+  }) async {
+    try {
+      final headers = {
+        'User-Agent': userAgent,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+      final poster = debugPost;
+      final response = poster != null
+          ? await poster(uri, headers: headers, body: body).timeout(timeout)
+          : await http.post(uri, headers: headers, body: body).timeout(timeout);
       return response;
     } on TimeoutException {
       throw const HttpFetchException('接続がタイムアウトしました');

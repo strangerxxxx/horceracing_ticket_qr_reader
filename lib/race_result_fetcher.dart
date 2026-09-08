@@ -2,6 +2,8 @@ import 'package:charset/charset.dart';
 
 import 'bet_type.dart';
 import 'http_fetch.dart';
+import 'jra_official_result_fetcher.dart';
+import 'netkeiba_urls.dart';
 import 'race_result.dart';
 import 'race_result_cache.dart';
 
@@ -26,7 +28,8 @@ class RaceMetaInfo {
   const RaceMetaInfo({this.raceName, this.raceDateLabel});
 }
 
-/// netkeiba のレース結果ページから払戻を取得する
+/// netkeiba DB のレース結果ページから払戻を取得する。
+/// 中央競馬で DB に払戻が無い場合は JRA 公式サイトへフォールバックする。
 class RaceResultFetcher {
   /// th の class → 式別名（netkeiba 表記）
   static const _betTypeByClass = {
@@ -50,6 +53,52 @@ class RaceResultFetcher {
       if (cached != null) return cached;
     }
 
+    RaceResult? dbResult;
+    Object? dbError;
+    try {
+      dbResult = await _fetchNetkeibaDb(url);
+      if (dbResult.hasResults) {
+        await _cacheQuietly(url, dbResult);
+        return dbResult;
+      }
+    } catch (e) {
+      dbError = e;
+    }
+
+    final raceId = NetkeibaUrls.raceIdFromDbUrl(url);
+    if (raceId != null && NetkeibaUrls.isJraRaceId(raceId)) {
+      try {
+        final jra = await JraOfficialResultFetcher.fetchByRaceId(
+          raceId,
+          sourceUrl: url,
+        );
+        if (jra.hasResults) {
+          final merged = _mergePreferringResults(dbResult, jra);
+          await _cacheQuietly(url, merged);
+          return merged;
+        }
+        if (dbResult == null) {
+          await _cacheQuietly(url, jra);
+          return jra;
+        }
+      } catch (_) {
+        // JRA 失敗時は DB 結果（または DB エラー）に戻す
+      }
+    }
+
+    if (dbResult != null) {
+      await _cacheQuietly(url, dbResult);
+      return dbResult;
+    }
+
+    if (dbError is HttpFetchException) throw dbError;
+    if (dbError != null) {
+      throw const HttpFetchException('レース結果の取得に失敗しました');
+    }
+    throw const HttpFetchException('レース結果の取得に失敗しました');
+  }
+
+  static Future<RaceResult> _fetchNetkeibaDb(String url) async {
     final response = await HttpFetch.get(Uri.parse(url));
 
     if (response.statusCode != 200) {
@@ -60,13 +109,48 @@ class RaceResultFetcher {
 
     // netkeiba は EUC-JP。馬名表示のため正しくデコードする。
     final html = const EucJPCodec(true).decode(response.bodyBytes);
-    final result = parseHtml(html, url);
+    return parseHtml(html, url);
+  }
+
+  /// DB にメタだけあり JRA に払戻がある場合など、双方を補完する
+  static RaceResult _mergePreferringResults(
+    RaceResult? primary,
+    RaceResult fallback,
+  ) {
+    if (primary == null) return fallback;
+    if (!fallback.hasResults) return primary;
+
+    return RaceResult(
+      url: primary.url,
+      payoutsByBetType: fallback.payoutsByBetType.isNotEmpty
+          ? fallback.payoutsByBetType
+          : primary.payoutsByBetType,
+      hasResults: fallback.hasResults || primary.hasResults,
+      horseNamesByNumber: fallback.horseNamesByNumber.isNotEmpty
+          ? fallback.horseNamesByNumber
+          : primary.horseNamesByNumber,
+      frameByHorseNumber: fallback.frameByHorseNumber.isNotEmpty
+          ? fallback.frameByHorseNumber
+          : primary.frameByHorseNumber,
+      fieldSize: fallback.fieldSize ?? primary.fieldSize,
+      raceName: (fallback.raceName != null && fallback.raceName!.isNotEmpty)
+          ? fallback.raceName
+          : primary.raceName,
+      raceDateLabel:
+          (fallback.raceDateLabel != null && fallback.raceDateLabel!.isNotEmpty)
+              ? fallback.raceDateLabel
+              : primary.raceDateLabel,
+      layoutRecognized:
+          fallback.layoutRecognized || primary.layoutRecognized,
+    );
+  }
+
+  static Future<void> _cacheQuietly(String url, RaceResult result) async {
     try {
       await RaceResultCache.write(url, result);
     } catch (_) {
       // キャッシュ失敗しても表示は続行する
     }
-    return result;
   }
 
   /// テスト・デバッグ用に公開
@@ -213,7 +297,8 @@ class RaceResultFetcher {
     for (final rowMatch in rowPattern.allMatches(tableMatch.group(0)!)) {
       final row = rowMatch.group(1)!;
       final nameMatch = RegExp(
-        r'<a href="/horse/[^"]*"[^>]*>([^<]+)</a>',
+        // 相対 (/horse/…) と絶対 (https://db.netkeiba.com/horse/…) の両方に対応
+        r'<a[^>]*href="[^"]*/horse/\d+/?[^"]*"[^>]*>([^<]+)</a>',
         caseSensitive: false,
       ).firstMatch(row);
       if (nameMatch == null) continue;

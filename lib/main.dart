@@ -240,7 +240,8 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         SizedBox(height: 12),
         Text(
-          'レース結果・払戻の照合は netkeiba の公開ページを参照しています。'
+          'レース結果・払戻の照合は、まず netkeiba DB の公開ページを参照し、'
+          '中央競馬で結果が無い場合は JRA 公式（jra.go.jp）のレース結果を参照します。'
           '地方競馬の開催日特定には keiba.go.jp の月次データを利用します。'
           'サイトの仕様変更により表示や的中判定が崩れることがあります。',
         ),

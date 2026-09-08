@@ -113,6 +113,38 @@ void main() {
     expect(result.fieldSize, 12);
   });
 
+  test('parseHtml accepts absolute horse URLs for frame and names', () {
+    const html = '''
+<html><body>
+<table class="race_table_01 nk_tb_common">
+<tr><th>着</th><th>枠</th><th>馬番</th><th>馬名</th></tr>
+<tr>
+<td class="txt_r">1</td>
+<td class="w5ml"><span>5</span></td>
+<td class="txt_r">5</td>
+<td class="txt_l"><a href="https://db.netkeiba.com/horse/2024103568/" title="コスモイェーガー" id="umalink_1">コスモイェーガー</a></td>
+</tr>
+<tr>
+<td class="txt_r">2</td>
+<td class="w2ml"><span>2</span></td>
+<td class="txt_r">2</td>
+<td class="txt_l"><a href="https://db.netkeiba.com/horse/2024103586/" title="アニエーネ">アニエーネ</a></td>
+</tr>
+</table>
+</body></html>
+''';
+    final result = RaceResultFetcher.parseHtml(
+      html,
+      'https://db.netkeiba.com/race/202604030101',
+    );
+
+    expect(result.horseNamesByNumber[5], 'コスモイェーガー');
+    expect(result.horseNamesByNumber[2], 'アニエーネ');
+    expect(result.frameByHorseNumber[5], 5);
+    expect(result.frameByHorseNumber[2], 2);
+    expect(result.fieldSize, 5);
+  });
+
   test('parseHtml extracts race name and date', () {
     final result = RaceResultFetcher.parseHtml(
       sampleHtml,
