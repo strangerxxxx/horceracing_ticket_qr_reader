@@ -4,6 +4,7 @@
 /// - 中央: `Num WakuN`（枠）+ `Num Txt_C`（馬番）
 /// - 地方: `Num WakuN`（枠）+ `Num Waku`（馬番・数字なし）
 class RaceNetkeibaResultParser {
+  /// 取消・除外行の馬番と枠番
   static ({Set<int> horses, Map<int, int> frames, Map<int, String> names})
       parseRefundedHorses(String html) {
     final horses = <int>{};

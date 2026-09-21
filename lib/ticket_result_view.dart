@@ -1229,7 +1229,7 @@ class _HitBadge extends StatelessWidget {
     final Color bg;
     final Color fg;
     final String label;
-    final hasRefund = result.hasRefund;
+    final details = <String>[];
 
     if (result.hit) {
       bg = HitColors.background(context);
@@ -1238,11 +1238,11 @@ class _HitBadge extends StatelessWidget {
       if (result.payoutYen > 0) {
         parts.add('払戻 ${_formatYen(result.payoutYen)}');
       }
-      if (hasRefund) {
+      if (result.hasRefund) {
         parts.add('返還 ${_formatYen(result.refundYen)}');
       }
       label = parts.join('  ');
-    } else if (hasRefund) {
+    } else if (result.hasRefund) {
       bg = HitColors.background(context);
       fg = HitColors.onBackground(context);
       label = '返還  ${_formatYen(result.refundYen)}';
@@ -1256,15 +1256,15 @@ class _HitBadge extends StatelessWidget {
       label = 'はずれ';
     }
 
-    final detailParts = <String>[];
     if (result.hit && result.matchedLabels.isNotEmpty) {
-      detailParts.add('的中組合せ ${result.matchedLabels.join(' / ')}');
+      details.add('的中組合せ: ${result.matchedLabels.join(' / ')}');
     }
-    if (hasRefund && result.refundedLabels.isNotEmpty) {
-      detailParts.add('返還組合せ ${result.refundedLabels.join(' / ')}');
+    if (result.hasRefund && result.refundedLabels.isNotEmpty) {
+      details.add('返還組合せ: ${result.refundedLabels.join(' / ')}');
     }
+
     final semanticLabel =
-        detailParts.isEmpty ? label : '$label。${detailParts.join('。')}';
+        details.isEmpty ? label : '$label。${details.join('。')}';
 
     return Semantics(
       label: semanticLabel,
@@ -1284,20 +1284,11 @@ class _HitBadge extends StatelessWidget {
                 style: TextStyle(color: fg, fontWeight: FontWeight.bold),
               ),
             ),
-            if (result.hit && result.matchedLabels.isNotEmpty) ...[
+            for (final line in details) ...[
               const SizedBox(height: 4),
               ExcludeSemantics(
                 child: Text(
-                  '的中組合せ: ${result.matchedLabels.join(' / ')}',
-                  style: TextStyle(color: fg, fontSize: 12),
-                ),
-              ),
-            ],
-            if (hasRefund && result.refundedLabels.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              ExcludeSemantics(
-                child: Text(
-                  '返還組合せ: ${result.refundedLabels.join(' / ')}',
+                  line,
                   style: TextStyle(color: fg, fontSize: 12),
                 ),
               ),

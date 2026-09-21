@@ -142,6 +142,10 @@ class TicketPayoutChecker {
   }
 
   /// 枠連の返還判定（JRAルール。地方の枠番連複にも同様に適用）
+  ///
+  /// - 取消馬の同枠に他馬がいない → その枠を含む組合せは返還
+  /// - 同枠に他馬が1頭 → ゾロ目のみ返還
+  /// - 同枠に他馬が2頭以上 → 返還なし
   static bool _isWakurenCombinationRefunded(
     List<int> frames,
     RaceResult raceResult,

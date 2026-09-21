@@ -70,8 +70,6 @@ class RaceResult {
     this.layoutRecognized = true,
   });
 
-  bool get hasRefunds => refundedHorseNumbers.isNotEmpty;
-
   RaceResult copyWith({
     String? url,
     Map<String, List<PayoutEntry>>? payoutsByBetType,
@@ -131,7 +129,10 @@ class RaceResult {
       },
       refundedHorseNumbers: {
         for (final item in refundsRaw)
-          if (item is int) item else int.parse(item.toString()),
+          if (item is int)
+            item
+          else
+            int.parse(item.toString()),
       },
       fieldSize: json['fieldSize'] as int?,
       raceName: json['raceName'] as String?,
@@ -170,6 +171,8 @@ class RaceResult {
       payoutsByBetType[betType] ?? const [];
 
   String? horseName(int number) => horseNamesByNumber[number];
+
+  bool get hasRefunds => refundedHorseNumbers.isNotEmpty;
 }
 
 /// 購入内容1件の照合結果
