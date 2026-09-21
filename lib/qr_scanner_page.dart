@@ -137,6 +137,9 @@ class _QRScannerPageState extends State<QRScannerPage> {
       if (_qrResults.contains(rawValue)) continue;
 
       _qrResults.add(rawValue);
+      debugPrint(
+        '[QR] detected ${_qrResults.length}/2 (${rawValue.length} chars): $rawValue',
+      );
 
       if (_qrResults.length == 2) {
         _processed = true;
@@ -281,8 +284,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
     if (!mounted) return;
 
     if (parsedData == null) {
-      debugPrint('Read 1: $first');
-      debugPrint('Read 2: $second');
       await _showParseErrorDialog();
       return;
     }

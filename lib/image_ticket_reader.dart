@@ -118,6 +118,9 @@ class ImageTicketReader {
           if (raw == null || raw.isEmpty) continue;
           if (found.contains(raw)) continue;
           found.add(raw);
+          debugPrint(
+            '[QR] image detected ${found.length} (${raw.length} chars): $raw',
+          );
           if (found.length >= 2) return found;
         }
       }
