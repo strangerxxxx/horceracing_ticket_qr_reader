@@ -25,7 +25,7 @@ void main() {
     expect(JraOfficialResultFetcher.parseRaceId('202645010101'), isNull);
   });
 
-  test('findMeetingCname matches prefix with date checksum', () {
+  test('findMeetingCname matches archived srl10 prefix', () {
     const html = '''
 <a onclick="doAction('/JRADB/accessS.html','pw01srl10042026030120260822/BB')">新潟</a>
 <a onclick="doAction('/JRADB/accessS.html','pw01srl10012026020120260822/AA')">札幌</a>
@@ -37,7 +37,18 @@ void main() {
     );
   });
 
-  test('findRaceDetailCname matches race number', () {
+  test('findMeetingCname prefers same-day srl00 over archived', () {
+    const html = '''
+<a onclick="return doAction('/JRADB/accessS.html', 'pw01srl00092026040720260921/E7');">4回阪神7日</a>
+''';
+    final parts = JraOfficialResultFetcher.parseRaceId('202609040701')!;
+    expect(
+      JraOfficialResultFetcher.findMeetingCname(html, parts),
+      'pw01srl00092026040720260921/E7',
+    );
+  });
+
+  test('findRaceDetailCname matches archived sde10', () {
     const html = '''
 <a href="/JRADB/accessS.html?CNAME=pw01sde1004202603010120260822/1A">1R</a>
 <a href="/JRADB/accessS.html?CNAME=pw01sde1004202603010220260822/CF">2R</a>
@@ -46,6 +57,18 @@ void main() {
     expect(
       JraOfficialResultFetcher.findRaceDetailCname(html, parts),
       'pw01sde1004202603010120260822/1A',
+    );
+  });
+
+  test('findRaceDetailCname matches same-day sde01', () {
+    const html = '''
+<th class="race_num"><a href="/JRADB/accessS.html?CNAME=pw01sde0109202604070120260921/4E"><img alt="1レース" /></a></th>
+<th class="race_num"><a href="/JRADB/accessS.html?CNAME=pw01sde0109202604070220260921/AB"><img alt="2レース" /></a></th>
+''';
+    final parts = JraOfficialResultFetcher.parseRaceId('202609040701')!;
+    expect(
+      JraOfficialResultFetcher.findRaceDetailCname(html, parts),
+      'pw01sde0109202604070120260921/4E',
     );
   });
 

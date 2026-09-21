@@ -86,25 +86,40 @@ class JraOfficialResultFetcher {
     );
   }
 
-  /// 開催一覧 HTML から `pw01srl10...` を探す
+  /// 開催一覧 HTML から開催 cname を探す。
+  ///
+  /// - 当日・速報系: `pw01srl00{場}{年}{回}{日}{yyyymmdd}/{cs}`
+  /// - 過去結果系: `pw01srl10{場}{年}{回}{日}{yyyymmdd}/{cs}`
   static String? findMeetingCname(String html, JraRaceIdParts parts) {
-    final prefix = 'pw01srl10${parts.jyo}${parts.year}${parts.kai}${parts.nichi}';
-    final pattern = RegExp(
-      '${RegExp.escape(prefix)}\\d{8}/[0-9A-Fa-f]{2}',
-      caseSensitive: false,
-    );
-    return pattern.firstMatch(html)?.group(0);
+    final body = '${parts.jyo}${parts.year}${parts.kai}${parts.nichi}';
+    // 当日リンクを優先（両方あることは通常ない）
+    for (final kind in ['00', '10']) {
+      final pattern = RegExp(
+        'pw01srl$kind${RegExp.escape(body)}\\d{8}/[0-9A-Fa-f]{2}',
+        caseSensitive: false,
+      );
+      final match = pattern.firstMatch(html);
+      if (match != null) return match.group(0);
+    }
+    return null;
   }
 
-  /// レース一覧 HTML から `pw01sde10...` を探す
+  /// レース一覧 HTML から結果詳細 cname を探す。
+  ///
+  /// - 当日・速報系: `pw01sde01{場}{年}{回}{日}{R}{yyyymmdd}/{cs}`
+  /// - 過去結果系: `pw01sde10{場}{年}{回}{日}{R}{yyyymmdd}/{cs}`
   static String? findRaceDetailCname(String html, JraRaceIdParts parts) {
-    final prefix =
-        'pw01sde10${parts.jyo}${parts.year}${parts.kai}${parts.nichi}${parts.race}';
-    final pattern = RegExp(
-      '${RegExp.escape(prefix)}\\d{8}/[0-9A-Fa-f]{2}',
-      caseSensitive: false,
-    );
-    return pattern.firstMatch(html)?.group(0);
+    final body =
+        '${parts.jyo}${parts.year}${parts.kai}${parts.nichi}${parts.race}';
+    for (final kind in ['01', '10']) {
+      final pattern = RegExp(
+        'pw01sde$kind${RegExp.escape(body)}\\d{8}/[0-9A-Fa-f]{2}',
+        caseSensitive: false,
+      );
+      final match = pattern.firstMatch(html);
+      if (match != null) return match.group(0);
+    }
+    return null;
   }
 
   /// テスト・デバッグ用に公開
