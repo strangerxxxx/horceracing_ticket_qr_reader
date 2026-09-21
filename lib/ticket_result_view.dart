@@ -309,7 +309,8 @@ class _TicketResultViewState extends State<TicketResultView> {
     if (result.hasResults) {
       final valid = checks.whereType<PurchaseCheckResult>().toList();
       final hits = valid.where((r) => r.hit).length;
-      final totalPayout = valid.fold<int>(0, (sum, r) => sum + r.payoutYen);
+      final totalPayout =
+          valid.fold<int>(0, (sum, r) => sum + r.totalReturnYen);
       if (data['払戻合計'] != totalPayout) updates['払戻合計'] = totalPayout;
       if (data['的中件数'] != hits) updates['的中件数'] = hits;
       if (data['結果取得済'] != true) updates['結果取得済'] = true;
@@ -505,7 +506,9 @@ class _TicketResultViewState extends State<TicketResultView> {
   Widget _buildOverallSummary(BuildContext context) {
     final valid = _checkResults.whereType<PurchaseCheckResult>().toList();
     final hits = valid.where((r) => r.hit).length;
-    final totalPayout = valid.fold<int>(0, (sum, r) => sum + r.payoutYen);
+    final refunds = valid.where((r) => r.hasRefund).length;
+    final totalPayout =
+        valid.fold<int>(0, (sum, r) => sum + r.totalReturnYen);
     final stake = TicketPayoutChecker.summarizeTicket(ticket);
     final labelStyle = TextStyle(
       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -524,16 +527,20 @@ class _TicketResultViewState extends State<TicketResultView> {
       ),
     ];
 
+    final statusLabel = hits > 0
+        ? (refunds > 0 ? '的中あり（$hits件）・返還あり' : '的中あり（$hits件）')
+        : (refunds > 0 ? '返還あり（$refunds件）' : '的中なし');
+
     return Semantics(
-      label: hits > 0 ? '的中あり、$hits件' : '的中なし',
+      label: statusLabel,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            hits > 0 ? '的中あり（$hits件）' : '的中なし',
+            statusLabel,
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: hits > 0
+              color: hits > 0 || refunds > 0
                   ? HitColors.foreground(context)
                   : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -592,6 +599,18 @@ class _TicketResultViewState extends State<TicketResultView> {
           ),
         ),
         const SizedBox(height: 8),
+        if (_raceResult!.hasRefunds) ...[
+          Builder(
+            builder: (context) {
+              final nums = _raceResult!.refundedHorseNumbers.toList()..sort();
+              return _InfoRow(
+                label: '返還',
+                value: '馬番 ${nums.join(', ')}',
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
         for (final betType in betTypes) ...[
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -1191,13 +1210,23 @@ class _HitBadge extends StatelessWidget {
     final Color bg;
     final Color fg;
     final String label;
+    final details = <String>[];
 
     if (result.hit) {
       bg = HitColors.background(context);
       fg = HitColors.onBackground(context);
-      label = result.payoutYen > 0
-          ? '的中  払戻 ${_formatYen(result.payoutYen)}'
-          : '的中';
+      final parts = <String>['的中'];
+      if (result.payoutYen > 0) {
+        parts.add('払戻 ${_formatYen(result.payoutYen)}');
+      }
+      if (result.hasRefund) {
+        parts.add('返還 ${_formatYen(result.refundYen)}');
+      }
+      label = parts.join('  ');
+    } else if (result.hasRefund) {
+      bg = HitColors.background(context);
+      fg = HitColors.onBackground(context);
+      label = '返還  ${_formatYen(result.refundYen)}';
     } else if (result.note != null) {
       bg = Theme.of(context).colorScheme.surfaceContainerHighest;
       fg = Theme.of(context).colorScheme.onSurfaceVariant;
@@ -1208,9 +1237,14 @@ class _HitBadge extends StatelessWidget {
       label = 'はずれ';
     }
 
-    final semanticLabel = result.hit && result.matchedLabels.isNotEmpty
-        ? '$label。的中組合せ ${result.matchedLabels.join(' / ')}'
-        : label;
+    if (result.hit && result.matchedLabels.isNotEmpty) {
+      details.add('的中組合せ: ${result.matchedLabels.join(' / ')}');
+    }
+    if (result.hasRefund && result.refundedLabels.isNotEmpty) {
+      details.add('返還組合せ: ${result.refundedLabels.join(' / ')}');
+    }
+
+    final semanticLabel = details.isEmpty ? label : '$label。${details.join('。')}';
 
     return Semantics(
       label: semanticLabel,
@@ -1230,11 +1264,11 @@ class _HitBadge extends StatelessWidget {
                 style: TextStyle(color: fg, fontWeight: FontWeight.bold),
               ),
             ),
-            if (result.hit && result.matchedLabels.isNotEmpty) ...[
+            for (final line in details) ...[
               const SizedBox(height: 4),
               ExcludeSemantics(
                 child: Text(
-                  '的中組合せ: ${result.matchedLabels.join(' / ')}',
+                  line,
                   style: TextStyle(color: fg, fontSize: 12),
                 ),
               ),

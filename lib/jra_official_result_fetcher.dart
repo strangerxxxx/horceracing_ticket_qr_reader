@@ -127,16 +127,20 @@ class JraOfficialResultFetcher {
     final table = parseRaceTable(html);
     final meta = parseRaceMeta(html);
     final payoutsByBetType = parsePayouts(html);
+    final refunded = {
+      ...table.refundedHorseNumbers,
+      ...parseRefundedHorseNumbersFromNotice(html),
+    };
 
     final hasTable = table.horseNamesByNumber.isNotEmpty;
     final hasMeta = (meta.raceName != null && meta.raceName!.isNotEmpty) ||
         (meta.raceDateLabel != null && meta.raceDateLabel!.isNotEmpty);
-    final hasRefund = RegExp(
+    final hasRefundArea = RegExp(
       r'class="[^"]*refund_area[^"]*"',
       caseSensitive: false,
     ).hasMatch(html);
     final layoutRecognized =
-        hasTable || hasMeta || hasRefund || payoutsByBetType.isNotEmpty;
+        hasTable || hasMeta || hasRefundArea || payoutsByBetType.isNotEmpty;
 
     return RaceResult(
       url: url,
@@ -144,11 +148,22 @@ class JraOfficialResultFetcher {
       hasResults: payoutsByBetType.isNotEmpty,
       horseNamesByNumber: table.horseNamesByNumber,
       frameByHorseNumber: table.frameByHorseNumber,
+      refundedHorseNumbers: refunded,
       fieldSize: table.fieldSize,
       raceName: meta.raceName,
       raceDateLabel: meta.raceDateLabel,
       layoutRecognized: layoutRecognized,
     );
+  }
+
+  /// 「返還馬番　7番」などの告知文から馬番を拾う
+  static Set<int> parseRefundedHorseNumbersFromNotice(String html) {
+    final found = <int>{};
+    for (final match in RegExp(r'返還馬番\s*(\d+)\s*番').allMatches(html)) {
+      final n = int.tryParse(match.group(1)!);
+      if (n != null && n > 0) found.add(n);
+    }
+    return found;
   }
 
   static Map<String, List<PayoutEntry>> parsePayouts(String html) {
@@ -240,6 +255,7 @@ class JraOfficialResultFetcher {
   static RaceTableInfo parseRaceTable(String html) {
     final names = <int, String>{};
     final frames = <int, int>{};
+    final refunded = <int>{};
 
     final rowPattern = RegExp(r'<tr>([\s\S]*?)</tr>', caseSensitive: false);
     for (final rowMatch in rowPattern.allMatches(html)) {
@@ -260,6 +276,17 @@ class JraOfficialResultFetcher {
       final name = _normalizeSpaces(_stripTags(horseMatch.group(1)!));
       if (name.isNotEmpty) {
         names[number] = name;
+      }
+
+      final placeMatch = RegExp(
+        r'<td class="place"[^>]*>([\s\S]*?)</td>',
+        caseSensitive: false,
+      ).firstMatch(row);
+      if (placeMatch != null) {
+        final place = _normalizeSpaces(_stripTags(placeMatch.group(1)!));
+        if (place.contains('取消') || place.contains('除外')) {
+          refunded.add(number);
+        }
       }
 
       final wakuMatch = RegExp(
@@ -284,6 +311,7 @@ class JraOfficialResultFetcher {
     return RaceTableInfo(
       horseNamesByNumber: names,
       frameByHorseNumber: frames,
+      refundedHorseNumbers: refunded,
       fieldSize: fieldSize,
     );
   }

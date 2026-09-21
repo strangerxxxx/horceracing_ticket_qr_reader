@@ -42,6 +42,9 @@ class RaceResult {
   /// 馬番 → 枠番（レース結果表から取得。無い場合は空）
   final Map<int, int> frameByHorseNumber;
 
+  /// 出走取消・競走除外などで返還対象となった馬番
+  final Set<int> refundedHorseNumbers;
+
   /// 出走頭数（結果表から判明した最大馬番。不明時は null）
   final int? fieldSize;
 
@@ -60,11 +63,38 @@ class RaceResult {
     required this.hasResults,
     this.horseNamesByNumber = const {},
     this.frameByHorseNumber = const {},
+    this.refundedHorseNumbers = const {},
     this.fieldSize,
     this.raceName,
     this.raceDateLabel,
     this.layoutRecognized = true,
   });
+
+  RaceResult copyWith({
+    String? url,
+    Map<String, List<PayoutEntry>>? payoutsByBetType,
+    bool? hasResults,
+    Map<int, String>? horseNamesByNumber,
+    Map<int, int>? frameByHorseNumber,
+    Set<int>? refundedHorseNumbers,
+    int? fieldSize,
+    String? raceName,
+    String? raceDateLabel,
+    bool? layoutRecognized,
+  }) {
+    return RaceResult(
+      url: url ?? this.url,
+      payoutsByBetType: payoutsByBetType ?? this.payoutsByBetType,
+      hasResults: hasResults ?? this.hasResults,
+      horseNamesByNumber: horseNamesByNumber ?? this.horseNamesByNumber,
+      frameByHorseNumber: frameByHorseNumber ?? this.frameByHorseNumber,
+      refundedHorseNumbers: refundedHorseNumbers ?? this.refundedHorseNumbers,
+      fieldSize: fieldSize ?? this.fieldSize,
+      raceName: raceName ?? this.raceName,
+      raceDateLabel: raceDateLabel ?? this.raceDateLabel,
+      layoutRecognized: layoutRecognized ?? this.layoutRecognized,
+    );
+  }
 
   factory RaceResult.fromJson(Map<String, dynamic> json) {
     final payoutsRaw = json['payoutsByBetType'] as Map? ?? {};
@@ -79,6 +109,7 @@ class RaceResult {
 
     final namesRaw = json['horseNamesByNumber'] as Map? ?? {};
     final framesRaw = json['frameByHorseNumber'] as Map? ?? {};
+    final refundsRaw = json['refundedHorseNumbers'] as List? ?? const [];
     final hasResults =
         json['hasResults'] as bool? ?? payoutsByBetType.isNotEmpty;
 
@@ -95,6 +126,13 @@ class RaceResult {
           int.parse(entry.key.toString()): entry.value is int
               ? entry.value as int
               : int.parse(entry.value.toString()),
+      },
+      refundedHorseNumbers: {
+        for (final item in refundsRaw)
+          if (item is int)
+            item
+          else
+            int.parse(item.toString()),
       },
       fieldSize: json['fieldSize'] as int?,
       raceName: json['raceName'] as String?,
@@ -122,6 +160,7 @@ class RaceResult {
           for (final entry in frameByHorseNumber.entries)
             entry.key.toString(): entry.value,
         },
+        'refundedHorseNumbers': refundedHorseNumbers.toList()..sort(),
         'fieldSize': fieldSize,
         'raceName': raceName,
         'raceDateLabel': raceDateLabel,
@@ -132,21 +171,31 @@ class RaceResult {
       payoutsByBetType[betType] ?? const [];
 
   String? horseName(int number) => horseNamesByNumber[number];
+
+  bool get hasRefunds => refundedHorseNumbers.isNotEmpty;
 }
 
 /// 購入内容1件の照合結果
 class PurchaseCheckResult {
   final bool hit;
   final int payoutYen;
+  final int refundYen;
   final List<String> matchedLabels;
+  final List<String> refundedLabels;
   final String? note;
 
   const PurchaseCheckResult({
     required this.hit,
     required this.payoutYen,
+    this.refundYen = 0,
     this.matchedLabels = const [],
+    this.refundedLabels = const [],
     this.note,
   });
+
+  int get totalReturnYen => payoutYen + refundYen;
+
+  bool get hasRefund => refundYen > 0;
 
   factory PurchaseCheckResult.miss({String? note}) =>
       PurchaseCheckResult(hit: false, payoutYen: 0, note: note);
