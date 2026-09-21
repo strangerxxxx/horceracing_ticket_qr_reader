@@ -44,7 +44,7 @@ class TicketPayoutChecker {
   ) {
     final ticket = _asTicket(ticketData);
     final item = _asPurchase(purchase);
-    if (!raceResult.hasResults) {
+    if (!raceResult.hasResults && !raceResult.hasRefunds) {
       return PurchaseCheckResult.unavailable('レース結果がまだ公開されていません');
     }
 
@@ -55,7 +55,7 @@ class TicketPayoutChecker {
 
     final normalizedBetType = normalizeBetType(betType);
     final payouts = raceResult.payoutsFor(normalizedBetType);
-    if (payouts.isEmpty) {
+    if (payouts.isEmpty && !raceResult.hasRefunds) {
       return PurchaseCheckResult.unavailable('$betType の払戻が見つかりません');
     }
 
@@ -82,23 +82,93 @@ class TicketPayoutChecker {
     };
 
     var totalPayout = 0;
+    var totalRefund = 0;
     final matched = <String>[];
+    final refunded = <String>[];
     for (final key in combinations) {
+      if (isCombinationRefunded(
+        combinationKey: key,
+        betType: normalizedBetType,
+        raceResult: raceResult,
+      )) {
+        totalRefund += amount;
+        refunded.add(
+          RaceResultFetcher.formatCombinationLabel(key, normalizedBetType),
+        );
+        continue;
+      }
+
       final hit = payoutByKey[key];
       if (hit == null) continue;
       totalPayout += hit.payoutPer100Yen * (amount ~/ 100);
       matched.add(hit.combinationLabel);
     }
 
-    if (matched.isEmpty) {
+    if (matched.isEmpty && refunded.isEmpty) {
       return PurchaseCheckResult.miss();
     }
 
     return PurchaseCheckResult(
-      hit: true,
+      hit: matched.isNotEmpty,
       payoutYen: totalPayout,
+      refundYen: totalRefund,
       matchedLabels: matched.toSet().toList(),
+      refundedLabels: refunded.toSet().toList(),
     );
+  }
+
+  /// 組合せキーが返還対象か（馬番系は取消馬を含むか、枠連は同枠ルール）
+  static bool isCombinationRefunded({
+    required String combinationKey,
+    required String betType,
+    required RaceResult raceResult,
+  }) {
+    if (!raceResult.hasRefunds) return false;
+
+    final normalized = normalizeBetType(betType);
+    final ordered = isOrderedBetType(normalized);
+    final parts = combinationKey.split(ordered ? '>' : '-');
+    final numbers = <int>[
+      for (final part in parts)
+        if (int.tryParse(part) != null) int.parse(part),
+    ];
+    if (numbers.isEmpty) return false;
+
+    if (isFrameBetType(normalized)) {
+      return _isWakurenCombinationRefunded(numbers, raceResult);
+    }
+
+    return numbers.any(raceResult.refundedHorseNumbers.contains);
+  }
+
+  /// 枠連の返還判定（JRAルール。地方の枠番連複にも同様に適用）
+  static bool _isWakurenCombinationRefunded(
+    List<int> frames,
+    RaceResult raceResult,
+  ) {
+    if (frames.isEmpty) return false;
+
+    for (final horse in raceResult.refundedHorseNumbers) {
+      final frame = raceResult.frameByHorseNumber[horse];
+      if (frame == null) continue;
+
+      final othersInFrame = raceResult.frameByHorseNumber.entries
+          .where(
+            (e) =>
+                e.value == frame &&
+                !raceResult.refundedHorseNumbers.contains(e.key),
+          )
+          .length;
+
+      if (othersInFrame == 0) {
+        if (frames.contains(frame)) return true;
+      } else if (othersInFrame == 1) {
+        if (frames.length >= 2 && frames.every((f) => f == frame)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /// 購入内容1件の点数・合計金額を計算する

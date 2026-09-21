@@ -7,6 +7,7 @@ import 'ticket_payout_checker.dart';
 enum HistoryHitFilter {
   all,
   hit,
+  refund,
   miss,
   pending,
 }
@@ -25,6 +26,7 @@ extension HistoryHitFilterLabel on HistoryHitFilter {
   String get label => switch (this) {
         HistoryHitFilter.all => 'すべて',
         HistoryHitFilter.hit => '的中',
+        HistoryHitFilter.refund => '返還',
         HistoryHitFilter.miss => 'はずれ',
         HistoryHitFilter.pending => '未判定',
       };
@@ -149,8 +151,12 @@ class ScanHistoryQuery {
         return true;
       case HistoryHitFilter.hit:
         return entry.hasPayoutResult && (entry.hitCount ?? 0) > 0;
+      case HistoryHitFilter.refund:
+        return entry.hasPayoutResult && (entry.refundCount ?? 0) > 0;
       case HistoryHitFilter.miss:
-        return entry.hasPayoutResult && (entry.hitCount ?? 0) == 0;
+        return entry.hasPayoutResult &&
+            (entry.hitCount ?? 0) == 0 &&
+            (entry.refundCount ?? 0) == 0;
       case HistoryHitFilter.pending:
         return !entry.hasPayoutResult;
     }
@@ -196,15 +202,21 @@ extension ScanHistoryEntryPayout on ScanHistoryEntry {
     return TicketPayoutChecker.summarizeTicket(ticket).totalAmountYen;
   }
 
-  /// 払戻合計（未判定時は null）
+  /// 払戻合計（未判定時は null）。返還分も含む。
   int? get payoutTotalYen => _asInt(data['払戻合計']);
 
   int? get hitCount => _asInt(data['的中件数']);
+
+  int? get refundCount => _asInt(data['返還件数']);
+
+  int? get refundTotalYen => _asInt(data['返還合計']);
 
   bool get hasPayoutResult {
     if (data['結果取得済'] == true) return true;
     return data.containsKey('払戻合計') && data['払戻合計'] != null;
   }
+
+  bool get hasRefundResult => hasPayoutResult && (refundCount ?? 0) > 0;
 
   int? get profitYen {
     final payout = payoutTotalYen;
@@ -230,7 +242,12 @@ extension ScanHistoryEntryPayout on ScanHistoryEntry {
   String get hitSummaryLabel {
     if (!hasPayoutResult) return '未判定';
     final hits = hitCount ?? 0;
+    final refunds = refundCount ?? 0;
+    if (hits > 0 && refunds > 0) return '的中$hits件・返還あり';
     if (hits > 0) return '的中$hits件';
+    if (refunds > 0) {
+      return refunds == 1 ? '返還あり' : '返還あり（$refunds件）';
+    }
     return 'はずれ';
   }
 
@@ -238,6 +255,10 @@ extension ScanHistoryEntryPayout on ScanHistoryEntry {
     final purchase = _formatYen(purchaseTotalYen);
     final payout = payoutTotalYen;
     if (payout == null) return '購入 $purchase';
+    final refund = refundTotalYen;
+    if (refund != null && refund > 0) {
+      return '購入 $purchase · 払戻 ${_formatYen(payout)}（返還 ${_formatYen(refund)}）';
+    }
     return '購入 $purchase · 払戻 ${_formatYen(payout)}';
   }
 }

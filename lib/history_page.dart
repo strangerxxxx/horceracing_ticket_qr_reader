@@ -318,9 +318,12 @@ class _HistoryPageState extends State<HistoryPage> {
                                     ],
                                   ),
                                   trailing: entry.hasPayoutResult &&
-                                          (entry.hitCount ?? 0) > 0
+                                          ((entry.hitCount ?? 0) > 0 ||
+                                              entry.hasRefundResult)
                                       ? Icon(
-                                          Icons.check_circle,
+                                          (entry.hitCount ?? 0) > 0
+                                              ? Icons.check_circle
+                                              : Icons.replay_circle_filled,
                                           color: HitColors.foreground(context),
                                         )
                                       : null,

@@ -4,6 +4,7 @@ import 'bet_type.dart';
 import 'http_fetch.dart';
 import 'jra_official_result_fetcher.dart';
 import 'netkeiba_urls.dart';
+import 'race_netkeiba_result_parser.dart';
 import 'race_result.dart';
 import 'race_result_cache.dart';
 
@@ -11,11 +12,13 @@ import 'race_result_cache.dart';
 class RaceTableInfo {
   final Map<int, String> horseNamesByNumber;
   final Map<int, int> frameByHorseNumber;
+  final Set<int> refundedHorseNumbers;
   final int? fieldSize;
 
   const RaceTableInfo({
     this.horseNamesByNumber = const {},
     this.frameByHorseNumber = const {},
+    this.refundedHorseNumbers = const {},
     this.fieldSize,
   });
 }
@@ -58,8 +61,9 @@ class RaceResultFetcher {
     try {
       dbResult = await _fetchNetkeibaDb(url);
       if (dbResult.hasResults) {
-        await _cacheQuietly(url, dbResult);
-        return dbResult;
+        final enriched = await _enrichRefunds(dbResult, raceIdFromUrl: url);
+        await _cacheQuietly(url, enriched);
+        return enriched;
       }
     } catch (e) {
       dbError = e;
@@ -74,12 +78,14 @@ class RaceResultFetcher {
         );
         if (jra.hasResults) {
           final merged = _mergePreferringResults(dbResult, jra);
-          await _cacheQuietly(url, merged);
-          return merged;
+          final enriched = await _enrichRefunds(merged, raceIdFromUrl: url);
+          await _cacheQuietly(url, enriched);
+          return enriched;
         }
         if (dbResult == null) {
-          await _cacheQuietly(url, jra);
-          return jra;
+          final enriched = await _enrichRefunds(jra, raceIdFromUrl: url);
+          await _cacheQuietly(url, enriched);
+          return enriched;
         }
       } catch (_) {
         // JRA 失敗時は DB 結果（または DB エラー）に戻す
@@ -87,8 +93,9 @@ class RaceResultFetcher {
     }
 
     if (dbResult != null) {
-      await _cacheQuietly(url, dbResult);
-      return dbResult;
+      final enriched = await _enrichRefunds(dbResult, raceIdFromUrl: url);
+      await _cacheQuietly(url, enriched);
+      return enriched;
     }
 
     if (dbError is HttpFetchException) throw dbError;
@@ -129,9 +136,14 @@ class RaceResultFetcher {
       horseNamesByNumber: fallback.horseNamesByNumber.isNotEmpty
           ? fallback.horseNamesByNumber
           : primary.horseNamesByNumber,
-      frameByHorseNumber: fallback.frameByHorseNumber.isNotEmpty
-          ? fallback.frameByHorseNumber
-          : primary.frameByHorseNumber,
+      frameByHorseNumber: {
+        ...primary.frameByHorseNumber,
+        ...fallback.frameByHorseNumber,
+      },
+      refundedHorseNumbers: {
+        ...primary.refundedHorseNumbers,
+        ...fallback.refundedHorseNumbers,
+      },
       fieldSize: fallback.fieldSize ?? primary.fieldSize,
       raceName: (fallback.raceName != null && fallback.raceName!.isNotEmpty)
           ? fallback.raceName
@@ -143,6 +155,55 @@ class RaceResultFetcher {
       layoutRecognized:
           fallback.layoutRecognized || primary.layoutRecognized,
     );
+  }
+
+  /// db.netkeiba に取消・除外が出ない場合、race/nar.netkeiba から返還馬を補完する
+  static Future<RaceResult> _enrichRefunds(
+    RaceResult result, {
+    required String raceIdFromUrl,
+  }) async {
+    if (result.refundedHorseNumbers.isNotEmpty) return result;
+
+    final raceId = NetkeibaUrls.raceIdFromDbUrl(raceIdFromUrl);
+    if (raceId == null) return result;
+
+    final year = NetkeibaUrls.westernYearFromRaceId(raceId);
+    if (year == null) return result;
+
+    final String? resultUrl;
+    if (NetkeibaUrls.isJraRaceId(raceId) && year >= 2008) {
+      resultUrl = NetkeibaUrls.jraResultUrl(raceId);
+    } else if (!NetkeibaUrls.isJraRaceId(raceId) && year >= 2016) {
+      resultUrl = NetkeibaUrls.narResultUrl(raceId);
+    } else {
+      resultUrl = null;
+    }
+    if (resultUrl == null) return result;
+
+    try {
+      final response = await HttpFetch.get(Uri.parse(resultUrl));
+      if (response.statusCode != 200) return result;
+      final parsed =
+          RaceNetkeibaResultParser.parseRefundedHorses(response.body);
+      if (parsed.horses.isEmpty) return result;
+
+      return result.copyWith(
+        refundedHorseNumbers: {
+          ...result.refundedHorseNumbers,
+          ...parsed.horses,
+        },
+        frameByHorseNumber: {
+          ...result.frameByHorseNumber,
+          ...parsed.frames,
+        },
+        horseNamesByNumber: {
+          ...result.horseNamesByNumber,
+          ...parsed.names,
+        },
+      );
+    } catch (_) {
+      return result;
+    }
   }
 
   static Future<void> _cacheQuietly(String url, RaceResult result) async {
@@ -175,6 +236,7 @@ class RaceResultFetcher {
         hasResults: false,
         horseNamesByNumber: table.horseNamesByNumber,
         frameByHorseNumber: table.frameByHorseNumber,
+        refundedHorseNumbers: table.refundedHorseNumbers,
         fieldSize: table.fieldSize,
         raceName: meta.raceName,
         raceDateLabel: meta.raceDateLabel,
@@ -235,6 +297,7 @@ class RaceResultFetcher {
       hasResults: payoutsByBetType.isNotEmpty,
       horseNamesByNumber: table.horseNamesByNumber,
       frameByHorseNumber: table.frameByHorseNumber,
+      refundedHorseNumbers: table.refundedHorseNumbers,
       fieldSize: table.fieldSize,
       raceName: meta.raceName,
       raceDateLabel: meta.raceDateLabel,
@@ -282,7 +345,7 @@ class RaceResultFetcher {
     return RaceMetaInfo(raceName: raceName, raceDateLabel: raceDateLabel);
   }
 
-  /// `race_table_01` から馬番・枠番・馬名を読む
+  /// `race_table_01` から馬番・枠番・馬名・返還対象を読む
   static RaceTableInfo parseRaceTable(String html) {
     final tableMatch = RegExp(
       r'class="race_table_01[^"]*"[\s\S]*?</table>',
@@ -292,6 +355,7 @@ class RaceResultFetcher {
 
     final names = <int, String>{};
     final frames = <int, int>{};
+    final refunded = <int>{};
     final rowPattern = RegExp(r'<tr>([\s\S]*?)</tr>', caseSensitive: false);
 
     for (final rowMatch in rowPattern.allMatches(tableMatch.group(0)!)) {
@@ -309,6 +373,7 @@ class RaceResultFetcher {
           .toList();
       // 着順 / 枠番 / 馬番 / 馬名 ...
       if (tds.length < 3) continue;
+      final placeText = tds[0];
       final frame = int.tryParse(tds[1]);
       final number = int.tryParse(tds[2]);
       if (number == null || number <= 0) continue;
@@ -320,6 +385,9 @@ class RaceResultFetcher {
       if (frame != null && frame >= 1 && frame <= 8) {
         frames[number] = frame;
       }
+      if (placeText.contains('取消') || placeText.contains('除外')) {
+        refunded.add(number);
+      }
     }
 
     final fieldSize = names.isEmpty
@@ -329,6 +397,7 @@ class RaceResultFetcher {
     return RaceTableInfo(
       horseNamesByNumber: names,
       frameByHorseNumber: frames,
+      refundedHorseNumbers: refunded,
       fieldSize: fieldSize,
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:horceracing_ticket_qr_reader/race_result.dart';
 import 'package:horceracing_ticket_qr_reader/race_result_fetcher.dart';
 import 'package:horceracing_ticket_qr_reader/ticket_payout_checker.dart';
 
@@ -267,5 +268,131 @@ void main() {
     );
     expect(result.layoutRecognized, isFalse);
     expect(result.hasResults, isFalse);
+  });
+
+  test('checkPurchase refunds combinations that include cancelled horses', () {
+    final race = RaceResult(
+      url: 'https://db.netkeiba.com/race/202445070310',
+      payoutsByBetType: {
+        'ワイド': [
+          const PayoutEntry(
+            combinationKey: '1-2',
+            combinationLabel: '1 - 2',
+            payoutPer100Yen: 150,
+          ),
+        ],
+        '馬連': [
+          const PayoutEntry(
+            combinationKey: '1-2',
+            combinationLabel: '1 - 2',
+            payoutPer100Yen: 500,
+          ),
+        ],
+      },
+      hasResults: true,
+      refundedHorseNumbers: const {3, 4},
+      frameByHorseNumber: const {3: 3, 4: 2, 6: 4, 7: 5},
+    );
+
+    final wideRefund = TicketPayoutChecker.checkPurchase(
+      {'券種': '通常'},
+      {
+        '式別': 'ワイド',
+        '馬番': [3, 7],
+        '購入金額': 800,
+      },
+      race,
+    );
+    expect(wideRefund.hit, isFalse);
+    expect(wideRefund.hasRefund, isTrue);
+    expect(wideRefund.refundYen, 800);
+    expect(wideRefund.totalReturnYen, 800);
+    expect(wideRefund.refundedLabels, isNotEmpty);
+
+    final umaRenRefund = TicketPayoutChecker.checkPurchase(
+      {'券種': '通常'},
+      {
+        '式別': '普通馬複',
+        '馬番': [4, 6],
+        '購入金額': 100,
+      },
+      race,
+    );
+    expect(umaRenRefund.hit, isFalse);
+    expect(umaRenRefund.refundYen, 100);
+
+    final unaffected = TicketPayoutChecker.checkPurchase(
+      {'券種': '通常'},
+      {
+        '式別': 'ワイド',
+        '馬番': [1, 2],
+        '購入金額': 100,
+      },
+      race,
+    );
+    expect(unaffected.hit, isTrue);
+    expect(unaffected.refundYen, 0);
+    expect(unaffected.payoutYen, 150);
+  });
+
+  test('wakuren refunds only when frame is emptied or same-frame pair', () {
+    final race = RaceResult(
+      url: 'https://example.com',
+      payoutsByBetType: {
+        '枠連': [
+          const PayoutEntry(
+            combinationKey: '1-2',
+            combinationLabel: '1 - 2',
+            payoutPer100Yen: 200,
+          ),
+        ],
+      },
+      hasResults: true,
+      // 枠3は馬3のみ → 枠3を含む枠連は返還
+      // 枠4は馬4取消でも馬8が残る → 枠4-5は返還しない、同枠4-4のみ返還
+      refundedHorseNumbers: const {3, 4},
+      frameByHorseNumber: const {
+        1: 1,
+        2: 2,
+        3: 3,
+        4: 4,
+        5: 5,
+        8: 4,
+      },
+    );
+
+    final emptiedFrame = TicketPayoutChecker.checkPurchase(
+      {'券種': '通常'},
+      {
+        '式別': '枠連',
+        '馬番': [2, 3],
+        '購入金額': 100,
+      },
+      race,
+    );
+    expect(emptiedFrame.refundYen, 100);
+
+    final sameFramePair = TicketPayoutChecker.checkPurchase(
+      {'券種': '通常'},
+      {
+        '式別': '枠連',
+        '馬番': [4, 4],
+        '購入金額': 100,
+      },
+      race,
+    );
+    expect(sameFramePair.refundYen, 100);
+
+    final survivingFrame = TicketPayoutChecker.checkPurchase(
+      {'券種': '通常'},
+      {
+        '式別': '枠連',
+        '馬番': [4, 5],
+        '購入金額': 100,
+      },
+      race,
+    );
+    expect(survivingFrame.hit, isFalse);
+    expect(survivingFrame.refundYen, 0);
   });
 }

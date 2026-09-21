@@ -54,12 +54,26 @@ void main() {
         '購入合計': 200,
       },
     );
+    final refund = entry(
+      id: 'r',
+      scannedAt: DateTime(2026, 1, 4),
+      data: {
+        '開催場': '川崎',
+        'レース': 10,
+        '結果取得済': true,
+        '的中件数': 0,
+        '返還件数': 1,
+        '返還合計': 800,
+        '払戻合計': 800,
+        '購入合計': 800,
+      },
+    );
     final pending = entry(
       id: 'p',
       scannedAt: DateTime(2026, 1, 1),
       data: {'開催場': '阪神', 'レース': 3, '購入合計': 300},
     );
-    final all = [hit, miss, pending];
+    final all = [hit, miss, refund, pending];
 
     expect(
       ScanHistoryQuery.filter(entries: all, hitFilter: HistoryHitFilter.hit)
@@ -74,10 +88,51 @@ void main() {
     expect(
       ScanHistoryQuery.filter(
         entries: all,
+        hitFilter: HistoryHitFilter.refund,
+      ).map((e) => e.id),
+      ['r'],
+    );
+    expect(
+      ScanHistoryQuery.filter(
+        entries: all,
         hitFilter: HistoryHitFilter.pending,
       ).map((e) => e.id),
       ['p'],
     );
+  });
+
+  test('hitSummaryLabel shows refund', () {
+    final refundOnly = entry(
+      id: 'r',
+      scannedAt: DateTime(2026, 1, 1),
+      data: {
+        '結果取得済': true,
+        '的中件数': 0,
+        '返還件数': 1,
+        '返還合計': 800,
+        '払戻合計': 800,
+        '購入合計': 800,
+      },
+    );
+    expect(refundOnly.hitSummaryLabel, '返還あり');
+    expect(
+      refundOnly.moneySummaryLabel,
+      '購入 800円 · 払戻 800円（返還 800円）',
+    );
+
+    final hitAndRefund = entry(
+      id: 'hr',
+      scannedAt: DateTime(2026, 1, 1),
+      data: {
+        '結果取得済': true,
+        '的中件数': 1,
+        '返還件数': 1,
+        '返還合計': 100,
+        '払戻合計': 720,
+        '購入合計': 200,
+      },
+    );
+    expect(hitAndRefund.hitSummaryLabel, '的中1件・返還あり');
   });
 
   test('search query matches venue and race name', () {
