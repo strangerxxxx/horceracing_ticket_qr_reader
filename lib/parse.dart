@@ -204,7 +204,11 @@ Map<String, dynamic> parseHorseracingTicketQr(String s) {
             throw ArgumentError("Unexpected betting_code: $bettingCode");
         }
         int c = (int.parse(ticketFormat) + 1) ~/ 2;
-        if ((bettingCode == "3" || bettingCode == "5") && ticketFormat == "3") {
+        // フォーマット3は枠連・馬連・ワイドの馬番欄が1スロット広い（余りは00）
+        if (ticketFormat == "3" &&
+            (bettingCode == "3" ||
+                bettingCode == "5" ||
+                bettingCode == "7")) {
           c += 1;
         }
         di["馬番"] = [
