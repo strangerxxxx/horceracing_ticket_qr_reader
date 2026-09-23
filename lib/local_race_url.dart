@@ -12,14 +12,35 @@ class LocalRaceResolveResult {
   final String? url;
   final String? failureReason;
 
-  const LocalRaceResolveResult._({this.url, this.failureReason});
+  /// 特定できた開催日（`YYYYMMDD`）。成功時のみ。
+  final String? calendarYyyymmdd;
 
-  const LocalRaceResolveResult.success(String url) : this._(url: url);
+  const LocalRaceResolveResult._({
+    this.url,
+    this.failureReason,
+    this.calendarYyyymmdd,
+  });
+
+  const LocalRaceResolveResult.success(
+    String url, {
+    String? calendarYyyymmdd,
+  }) : this._(url: url, calendarYyyymmdd: calendarYyyymmdd);
 
   const LocalRaceResolveResult.failure(String reason)
       : this._(failureReason: reason);
 
   bool get isSuccess => url != null;
+
+  /// `2025年4月6日` 形式。特定できていなければ null。
+  String? get raceDateLabel {
+    final raw = calendarYyyymmdd;
+    if (raw == null || raw.length < 8) return null;
+    final y = int.tryParse(raw.substring(0, 4));
+    final m = int.tryParse(raw.substring(4, 6));
+    final d = int.tryParse(raw.substring(6, 8));
+    if (y == null || m == null || d == null) return null;
+    return '$y年$m月$d日';
+  }
 }
 
 /// 地方競馬の開催日を keiba.go.jp 月次CSV + netkeiba から特定し、
@@ -157,6 +178,7 @@ class LocalRaceUrlResolver {
               monthDay: date.substring(4, 8),
               race: race,
             ),
+            calendarYyyymmdd: date,
           );
         }
       } on HttpFetchException {

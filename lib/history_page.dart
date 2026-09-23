@@ -304,12 +304,14 @@ class _HistoryPageState extends State<HistoryPage> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(entry.subtitle),
+                                      Text(entry.raceDateTimeLabel),
+                                      if (entry.subtitle.isNotEmpty)
+                                        Text(entry.subtitle),
                                       Text(
                                         '${entry.hitSummaryLabel} · ${entry.moneySummaryLabel}',
                                       ),
                                       Text(
-                                        entry.scannedAtLabel,
+                                        '読込 ${entry.scannedAtLabel}',
                                         style: TextStyle(
                                           color: muted,
                                           fontSize: 12,

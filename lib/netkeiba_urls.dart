@@ -33,6 +33,24 @@ class NetkeibaUrls {
 
   static String narResultUrl(String raceId) => '$narResultBase$raceId';
 
+  /// 地方 race_id（`YYYY + 場 + MMDD + RR`）から開催日を取り出す。中央は null。
+  static DateTime? calendarDateFromRaceId(String raceId) {
+    if (raceId.length < 12 || isJraRaceId(raceId)) return null;
+    final y = int.tryParse(raceId.substring(0, 4));
+    final month = int.tryParse(raceId.substring(6, 8));
+    final day = int.tryParse(raceId.substring(8, 10));
+    if (y == null || month == null || day == null) return null;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return DateTime(y, month, day);
+  }
+
+  /// DB URL から地方開催日を取り出す。
+  static DateTime? calendarDateFromDbUrl(String? url) {
+    if (url == null || url.isEmpty) return null;
+    final id = raceIdFromDbUrl(url);
+    if (id == null) return null;
+    return calendarDateFromRaceId(id);
+  }
   /// 表示用 URL 一覧（先頭は常に DB。条件を満たせば結果ページも付ける）。
   ///
   /// - 中央・2008年以降: [race.netkeiba.com 結果](https://race.netkeiba.com/race/result.html?race_id=)

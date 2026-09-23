@@ -1,4 +1,3 @@
-import 'local_race_url.dart';
 import 'ticket.dart';
 
 /// 読み取り履歴の1件分
@@ -53,18 +52,7 @@ class ScanHistoryEntry {
 
     final parts = <String>[];
 
-    final dateLabel = t.raceDateLabel;
-    if (dateLabel != null && dateLabel.isNotEmpty) {
-      final post = t.postTime;
-      if (post != null && post.isNotEmpty) {
-        parts.add('$dateLabel $post');
-      } else {
-        parts.add(dateLabel);
-      }
-    } else if (t.year != null) {
-      final yearStr = LocalRaceUrlResolver.formatYearLabelForTicket(data, t.year!);
-      parts.add('$yearStr 第${t.round}回 第${t.day}日');
-    }
+    // レース日時は一覧で別行表示するため、ここでは券種・式別中心
     if (t.ticketType != null) {
       parts.add(t.ticketType!);
     }

@@ -194,6 +194,7 @@ void main() {
         '開催日': '2025年4月6日',
         '発走時刻': '10:00',
         '開催場': '阪神',
+        'レース': 1,
       },
     );
     final late = entry(
@@ -203,6 +204,7 @@ void main() {
         '開催日': '2025年4月6日',
         '発走時刻': '15:40',
         '開催場': '阪神',
+        'レース': 11,
       },
     );
 
@@ -214,6 +216,70 @@ void main() {
     expect(sorted.map((e) => e.id), ['a', 'b']);
     expect(early.raceDateTime, DateTime(2025, 4, 6, 10, 0));
     expect(late.raceDateTime, DateTime(2025, 4, 6, 15, 40));
+  });
+
+  test('sort by raceDate works without 開催日 using year/round/day/race', () {
+    final r1 = entry(
+      id: 'r1',
+      scannedAt: DateTime(2026, 1, 5),
+      data: {
+        '開催場': '阪神',
+        '年': 25,
+        '回': 2,
+        '日': 4,
+        'レース': 1,
+        '発走時刻': '10:20',
+      },
+    );
+    final r11 = entry(
+      id: 'r11',
+      scannedAt: DateTime(2026, 1, 1),
+      data: {
+        '開催場': '阪神',
+        '年': 25,
+        '回': 2,
+        '日': 4,
+        'レース': 11,
+        '発走時刻': '15:40',
+      },
+    );
+    final earlierMeeting = entry(
+      id: 'prev',
+      scannedAt: DateTime(2026, 1, 9),
+      data: {
+        '開催場': '阪神',
+        '年': 25,
+        '回': 1,
+        '日': 8,
+        'レース': 12,
+        '発走時刻': '16:00',
+      },
+    );
+
+    final sorted = ScanHistoryQuery.sort(
+      entries: [r11, earlierMeeting, r1],
+      field: HistorySortField.raceDate,
+      ascending: true,
+    );
+    expect(sorted.map((e) => e.id), ['prev', 'r1', 'r11']);
+  });
+
+  test('sort by raceDate uses NAR URL calendar date', () {
+    final kawasaki = entry(
+      id: 'k',
+      scannedAt: DateTime(2026, 1, 1),
+      data: {
+        '開催場': '川崎',
+        '年': 6,
+        '回': 4,
+        '日': 3,
+        'レース': 10,
+        'URL': 'https://db.netkeiba.com/race/202445070310',
+        '発走時刻': '19:30',
+      },
+    );
+    expect(kawasaki.raceDateTime, DateTime(2024, 7, 3, 19, 30));
+    expect(kawasaki.raceDateTimeLabel, '2024年7月3日 19:30発走');
   });
 
   test('totals sum purchase and payout for filtered list', () {

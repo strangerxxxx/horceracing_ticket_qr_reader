@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:horceracing_ticket_qr_reader/scan_history_entry.dart';
+import 'package:horceracing_ticket_qr_reader/scan_history_query.dart';
 
 void main() {
   test('title includes venue, race number, and race name', () {
@@ -57,7 +58,7 @@ void main() {
         ],
       },
     );
-    expect(entry.subtitle, contains('2025年4月6日 15:40'));
+    expect(entry.raceDateTimeLabel, '2025年4月6日 15:40発走');
     expect(entry.subtitle, contains('ながし'));
   });
 }

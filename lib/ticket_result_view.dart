@@ -207,6 +207,28 @@ class _TicketResultViewState extends State<TicketResultView> {
         _resolvedUrl = result.url;
         _resolvingUrl = false;
       });
+
+      final dateLabel = result.raceDateLabel;
+      if (dateLabel != null || result.url != null) {
+        final updates = <String, dynamic>{};
+        if (result.url != null && data['URL']?.toString() != result.url) {
+          updates['URL'] = result.url;
+        }
+        if (dateLabel != null && data['開催日']?.toString() != dateLabel) {
+          updates['開催日'] = dateLabel;
+        }
+        if (updates.isNotEmpty) {
+          final merged = {...data, ...updates};
+          final historyEntryId = widget.historyEntryId;
+          if (historyEntryId != null) {
+            await ScanHistoryService.updateData(historyEntryId, updates);
+          }
+          if (mounted) {
+            widget.onDataUpdated?.call(merged);
+          }
+        }
+      }
+
       await _loadRaceResult(generation: generation);
     } on HttpFetchException catch (e) {
       if (!_isCurrentGeneration(generation)) return;

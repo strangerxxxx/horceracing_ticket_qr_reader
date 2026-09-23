@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'local_race_url.dart';
+import 'netkeiba_urls.dart';
 import 'scan_history_entry.dart';
 import 'ticket_payout_checker.dart';
 
@@ -103,9 +105,9 @@ class ScanHistoryQuery {
     int cmp(ScanHistoryEntry a, ScanHistoryEntry b) {
       final result = switch (field) {
         HistorySortField.scannedAt => a.scannedAt.compareTo(b.scannedAt),
-        HistorySortField.raceDate => _compareNullableDate(
-            a.raceDateTime,
-            b.raceDateTime,
+        HistorySortField.raceDate => _compareRaceSortKey(
+            a.raceSortKey,
+            b.raceSortKey,
           ),
         HistorySortField.purchase =>
           a.purchaseTotalYen.compareTo(b.purchaseTotalYen),
@@ -117,7 +119,10 @@ class ScanHistoryQuery {
         HistorySortField.venue =>
           (a.ticket.venueName ?? '').compareTo(b.ticket.venueName ?? ''),
       };
-      return ascending ? result : -result;
+      if (result != 0) return ascending ? result : -result;
+      // 同値時は読み込み日時で安定化
+      final byScan = a.scannedAt.compareTo(b.scannedAt);
+      return ascending ? byScan : -byScan;
     }
 
     list.sort(cmp);
@@ -176,6 +181,7 @@ class ScanHistoryQuery {
       for (final p in t.purchases) p.betType,
       entry.hitSummaryLabel,
       t.postTime,
+      entry.raceDateTimeLabel,
     ].whereType<String>().join(' ').toLowerCase();
     return haystack.contains(q);
   }
@@ -187,11 +193,13 @@ class ScanHistoryQuery {
     return a.compareTo(b);
   }
 
-  static int _compareNullableDate(DateTime? a, DateTime? b) {
-    if (a == null && b == null) return 0;
-    if (a == null) return 1;
-    if (b == null) return -1;
-    return a.compareTo(b);
+  static int _compareRaceSortKey(List<int> a, List<int> b) {
+    final n = a.length < b.length ? a.length : b.length;
+    for (var i = 0; i < n; i++) {
+      final c = a[i].compareTo(b[i]);
+      if (c != 0) return c;
+    }
+    return a.length.compareTo(b.length);
   }
 }
 
@@ -226,30 +234,112 @@ extension ScanHistoryEntryPayout on ScanHistoryEntry {
   }
 
   DateTime? get raceDateTime {
+    final post = _postTimeParts();
+    final calendar = _calendarDate();
+    if (calendar != null) {
+      return DateTime(
+        calendar.year,
+        calendar.month,
+        calendar.day,
+        post?.$1 ?? 0,
+        post?.$2 ?? 0,
+      );
+    }
+    return null;
+  }
+
+  /// レース日時ソート用キー。開催日が無くても年・回・日・レース・発走で順序を付ける。
+  List<int> get raceSortKey {
+    final post = _postTimeParts();
+    final hour = post?.$1 ?? -1;
+    final minute = post?.$2 ?? -1;
+    final raceNo = ticket.raceNumber ?? 0;
+
+    final calendar = _calendarDate();
+    if (calendar != null) {
+      // tier0: 絶対日付
+      return [
+        0,
+        calendar.year,
+        calendar.month,
+        calendar.day,
+        hour,
+        minute,
+        raceNo,
+      ];
+    }
+
+    final year = ticket.year != null
+        ? LocalRaceUrlResolver.toWesternYear(ticket.year!)
+        : 0;
+    // tier1: 開催回・日ベース（券面から常に取れる）
+    return [
+      1,
+      year,
+      ticket.round ?? 0,
+      ticket.day ?? 0,
+      hour,
+      minute,
+      raceNo,
+    ];
+  }
+
+  /// 履歴一覧向けのレース日時表示（開催日・発走時刻を優先）。
+  String get raceDateTimeLabel {
+    final post = ticket.postTime;
+    final calendar = _calendarDate();
+    if (calendar != null) {
+      final date =
+          '${calendar.year}年${calendar.month}月${calendar.day}日';
+      if (post != null && post.isNotEmpty) return '$date $post発走';
+      return date;
+    }
+
+    final t = ticket;
+    if (t.year == null) {
+      if (post != null && post.isNotEmpty) return '発走 $post';
+      return 'レース日時不明';
+    }
+    final yearStr =
+        LocalRaceUrlResolver.formatYearLabelForTicket(data, t.year!);
+    final parts = <String>[
+      yearStr,
+      if (t.round != null) '第${t.round}回',
+      if (t.day != null) '第${t.day}日',
+      if (t.raceNumber != null) '${t.raceNumber}R',
+    ];
+    var label = parts.join(' ');
+    if (post != null && post.isNotEmpty) {
+      label = '$label · $post発走';
+    }
+    return label;
+  }
+
+  DateTime? _calendarDate() {
     final label = ticket.raceDateLabel;
     if (label != null) {
       final m = RegExp(r'(\d{4})年(\d{1,2})月(\d{1,2})日').firstMatch(label);
       if (m != null) {
-        var hour = 0;
-        var minute = 0;
-        final post = ticket.postTime;
-        if (post != null) {
-          final tm = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(post);
-          if (tm != null) {
-            hour = int.parse(tm.group(1)!);
-            minute = int.parse(tm.group(2)!);
-          }
-        }
         return DateTime(
           int.parse(m.group(1)!),
           int.parse(m.group(2)!),
           int.parse(m.group(3)!),
-          hour,
-          minute,
         );
       }
     }
+
+    final fromUrl = NetkeibaUrls.calendarDateFromDbUrl(ticket.resultUrl);
+    if (fromUrl != null) return fromUrl;
+
     return null;
+  }
+
+  (int, int)? _postTimeParts() {
+    final post = ticket.postTime;
+    if (post == null) return null;
+    final tm = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(post);
+    if (tm == null) return null;
+    return (int.parse(tm.group(1)!), int.parse(tm.group(2)!));
   }
 
   String get hitSummaryLabel {
