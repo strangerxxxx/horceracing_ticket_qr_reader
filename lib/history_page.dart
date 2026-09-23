@@ -298,38 +298,76 @@ class _HistoryPageState extends State<HistoryPage> {
                                   ),
                                 ),
                                 onDismissed: (_) => _deleteEntry(entry),
-                                child: ListTile(
-                                  title: Text(entry.title),
-                                  subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(entry.raceDateTimeLabel),
-                                      if (entry.subtitle.isNotEmpty)
-                                        Text(entry.subtitle),
-                                      Text(
-                                        '${entry.hitSummaryLabel} · ${entry.moneySummaryLabel}',
-                                      ),
-                                      Text(
-                                        '読込 ${entry.scannedAtLabel}',
-                                        style: TextStyle(
-                                          color: muted,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  trailing: entry.hasPayoutResult &&
-                                          ((entry.hitCount ?? 0) > 0 ||
-                                              entry.hasRefundResult)
-                                      ? Icon(
-                                          (entry.hitCount ?? 0) > 0
-                                              ? Icons.check_circle
-                                              : Icons.replay_circle_filled,
-                                          color: HitColors.foreground(context),
-                                        )
-                                      : null,
+                                child: InkWell(
                                   onTap: () => _openDetail(entry),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                entry.title,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleMedium,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                entry.raceDateTimeLabel,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyMedium
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                              ),
+                                              if (entry.subtitle.isNotEmpty) ...[
+                                                const SizedBox(height: 2),
+                                                Text(entry.subtitle),
+                                              ],
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '${entry.hitSummaryLabel} · ${entry.moneySummaryLabel}',
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '読込 ${entry.scannedAtLabel}',
+                                                style: TextStyle(
+                                                  color: muted,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (entry.hasPayoutResult &&
+                                            ((entry.hitCount ?? 0) > 0 ||
+                                                entry.hasRefundResult))
+                                          Padding(
+                                            padding:
+                                                const EdgeInsets.only(left: 8),
+                                            child: Icon(
+                                              (entry.hitCount ?? 0) > 0
+                                                  ? Icons.check_circle
+                                                  : Icons.replay_circle_filled,
+                                              color: HitColors.foreground(
+                                                context,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             );
