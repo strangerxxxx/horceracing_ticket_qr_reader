@@ -186,6 +186,36 @@ void main() {
     expect(byPayout.map((e) => e.id), ['b', 'a']);
   });
 
+  test('sort by raceDate uses post time when available', () {
+    final early = entry(
+      id: 'a',
+      scannedAt: DateTime(2026, 1, 1),
+      data: {
+        '開催日': '2025年4月6日',
+        '発走時刻': '10:00',
+        '開催場': '阪神',
+      },
+    );
+    final late = entry(
+      id: 'b',
+      scannedAt: DateTime(2026, 1, 2),
+      data: {
+        '開催日': '2025年4月6日',
+        '発走時刻': '15:40',
+        '開催場': '阪神',
+      },
+    );
+
+    final sorted = ScanHistoryQuery.sort(
+      entries: [late, early],
+      field: HistorySortField.raceDate,
+      ascending: true,
+    );
+    expect(sorted.map((e) => e.id), ['a', 'b']);
+    expect(early.raceDateTime, DateTime(2025, 4, 6, 10, 0));
+    expect(late.raceDateTime, DateTime(2025, 4, 6, 15, 40));
+  });
+
   test('totals sum purchase and payout for filtered list', () {
     final entries = [
       entry(

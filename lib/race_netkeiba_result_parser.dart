@@ -43,6 +43,22 @@ class RaceNetkeibaResultParser {
     return (horses: horses, frames: frames, names: names);
   }
 
+  /// `RaceData01` の「15:40発走」から発走時刻を読む
+  static String? parsePostTime(String html) {
+    final match = RegExp(
+      r'class="RaceData01"[^>]*>\s*(\d{1,2}:\d{2})\s*発走',
+      caseSensitive: false,
+    ).firstMatch(html);
+    if (match == null) return null;
+    final raw = match.group(1)!;
+    final parts = raw.split(':');
+    if (parts.length != 2) return raw;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return raw;
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+  }
+
   static int? _parseHorseNumber(String row) {
     // 中央: Num Txt_C
     final jra = RegExp(

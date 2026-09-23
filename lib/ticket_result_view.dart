@@ -19,6 +19,7 @@ import 'ticket_payout_checker.dart';
 const _persistedMetaKeys = {
   'レース名',
   '開催日',
+  '発走時刻',
   '購入合計',
   '払戻合計',
   '的中件数',
@@ -300,6 +301,13 @@ class _TicketResultViewState extends State<TicketResultView> {
         raceDateLabel.isNotEmpty &&
         data['開催日']?.toString() != raceDateLabel) {
       updates['開催日'] = raceDateLabel;
+    }
+
+    final postTime = result.postTime;
+    if (postTime != null &&
+        postTime.isNotEmpty &&
+        data['発走時刻']?.toString() != postTime) {
+      updates['発走時刻'] = postTime;
     }
 
     final stake = TicketPayoutChecker.summarizeTicket(ticket);
@@ -773,6 +781,10 @@ class _TicketResultViewState extends State<TicketResultView> {
     addRow('開催日', _raceMetaDisplayValue(
       _raceResult?.raceDateLabel,
       data['開催日']?.toString(),
+    ));
+    addRow('発走時刻', _raceMetaDisplayValue(
+      _raceResult?.postTime,
+      data['発走時刻']?.toString(),
     ));
     addRow('レース名', _raceMetaDisplayValue(
       _raceResult?.raceName,

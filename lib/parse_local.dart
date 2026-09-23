@@ -173,8 +173,8 @@ const Map<String, String> wheelTrifectaDict = {
 /// 地方フォーマット4以降の3連単ながしコード（JRAと同じ並び）
 const Map<String, String> wheelTrifectaDictFmt4 = {
   "1": "1・2着ながし",
-  "2": "1・3着ながし",
-  "3": "2・3着ながし",
+  "2": "2・3着ながし",
+  "3": "1・3着ながし",
   "4": "1着ながし",
   "5": "2着ながし",
   "6": "3着ながし",

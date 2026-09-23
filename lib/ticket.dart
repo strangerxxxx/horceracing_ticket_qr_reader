@@ -19,6 +19,7 @@ class Ticket {
   final String? underDigits;
   final String? raceName;
   final String? raceDateLabel;
+  final String? postTime;
   final String? error;
   final String? errorDetail;
 
@@ -42,6 +43,7 @@ class Ticket {
     this.underDigits,
     this.raceName,
     this.raceDateLabel,
+    this.postTime,
     this.error,
     this.errorDetail,
   });
@@ -81,6 +83,7 @@ class Ticket {
       underDigits: map['下端番号']?.toString(),
       raceName: map['レース名']?.toString(),
       raceDateLabel: map['開催日']?.toString(),
+      postTime: map['発走時刻']?.toString(),
       error: map['エラー']?.toString(),
       errorDetail: map['詳細']?.toString(),
     );
@@ -119,18 +122,21 @@ class Ticket {
       if (underDigits != null) '下端番号': underDigits,
       if (raceName != null) 'レース名': raceName,
       if (raceDateLabel != null) '開催日': raceDateLabel,
+      if (postTime != null) '発走時刻': postTime,
     };
   }
 
   Ticket copyWith({
     String? raceName,
     String? raceDateLabel,
+    String? postTime,
     String? resultUrl,
     Map<String, dynamic>? extra,
   }) {
     final map = toMap();
     if (raceName != null) map['レース名'] = raceName;
     if (raceDateLabel != null) map['開催日'] = raceDateLabel;
+    if (postTime != null) map['発走時刻'] = postTime;
     if (resultUrl != null) map['URL'] = resultUrl;
     if (extra != null) map.addAll(extra);
     return Ticket.fromMap(map);

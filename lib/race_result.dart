@@ -54,6 +54,9 @@ class RaceResult {
   /// 開催年月日の表示用（例: 2025年5月4日）
   final String? raceDateLabel;
 
+  /// 発走時刻の表示用（例: 15:40）
+  final String? postTime;
+
   /// netkeiba の想定HTML構造を認識できたか（壊れたときの警告用）
   final bool layoutRecognized;
 
@@ -67,8 +70,11 @@ class RaceResult {
     this.fieldSize,
     this.raceName,
     this.raceDateLabel,
+    this.postTime,
     this.layoutRecognized = true,
   });
+
+  bool get hasRefunds => refundedHorseNumbers.isNotEmpty;
 
   RaceResult copyWith({
     String? url,
@@ -80,6 +86,7 @@ class RaceResult {
     int? fieldSize,
     String? raceName,
     String? raceDateLabel,
+    String? postTime,
     bool? layoutRecognized,
   }) {
     return RaceResult(
@@ -92,6 +99,7 @@ class RaceResult {
       fieldSize: fieldSize ?? this.fieldSize,
       raceName: raceName ?? this.raceName,
       raceDateLabel: raceDateLabel ?? this.raceDateLabel,
+      postTime: postTime ?? this.postTime,
       layoutRecognized: layoutRecognized ?? this.layoutRecognized,
     );
   }
@@ -137,11 +145,13 @@ class RaceResult {
       fieldSize: json['fieldSize'] as int?,
       raceName: json['raceName'] as String?,
       raceDateLabel: json['raceDateLabel'] as String?,
+      postTime: json['postTime'] as String?,
       layoutRecognized: json['layoutRecognized'] as bool? ??
           (hasResults ||
               namesRaw.isNotEmpty ||
               json['raceName'] != null ||
-              json['raceDateLabel'] != null),
+              json['raceDateLabel'] != null ||
+              json['postTime'] != null),
     );
   }
 
@@ -164,6 +174,7 @@ class RaceResult {
         'fieldSize': fieldSize,
         'raceName': raceName,
         'raceDateLabel': raceDateLabel,
+        'postTime': postTime,
         'layoutRecognized': layoutRecognized,
       };
 
@@ -171,8 +182,6 @@ class RaceResult {
       payoutsByBetType[betType] ?? const [];
 
   String? horseName(int number) => horseNamesByNumber[number];
-
-  bool get hasRefunds => refundedHorseNumbers.isNotEmpty;
 }
 
 /// 購入内容1件の照合結果

@@ -175,6 +175,7 @@ class ScanHistoryQuery {
       t.salesOffice,
       for (final p in t.purchases) p.betType,
       entry.hitSummaryLabel,
+      t.postTime,
     ].whereType<String>().join(' ').toLowerCase();
     return haystack.contains(q);
   }
@@ -229,10 +230,22 @@ extension ScanHistoryEntryPayout on ScanHistoryEntry {
     if (label != null) {
       final m = RegExp(r'(\d{4})年(\d{1,2})月(\d{1,2})日').firstMatch(label);
       if (m != null) {
+        var hour = 0;
+        var minute = 0;
+        final post = ticket.postTime;
+        if (post != null) {
+          final tm = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(post);
+          if (tm != null) {
+            hour = int.parse(tm.group(1)!);
+            minute = int.parse(tm.group(2)!);
+          }
+        }
         return DateTime(
           int.parse(m.group(1)!),
           int.parse(m.group(2)!),
           int.parse(m.group(3)!),
+          hour,
+          minute,
         );
       }
     }

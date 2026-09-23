@@ -38,4 +38,26 @@ void main() {
     expect(entry.title, '解析エラー');
     expect(entry.subtitle, '解析に失敗しました');
   });
+
+  test('subtitle prefers calendar date and post time', () {
+    final entry = ScanHistoryEntry(
+      id: '1',
+      scannedAt: DateTime(2026, 1, 15, 12, 30),
+      data: {
+        '開催場': '阪神',
+        'レース': 11,
+        '年': 25,
+        '回': 2,
+        '日': 4,
+        '券種': 'ながし',
+        '開催日': '2025年4月6日',
+        '発走時刻': '15:40',
+        '購入内容': [
+          {'式別': '3連単'},
+        ],
+      },
+    );
+    expect(entry.subtitle, contains('2025年4月6日 15:40'));
+    expect(entry.subtitle, contains('ながし'));
+  });
 }

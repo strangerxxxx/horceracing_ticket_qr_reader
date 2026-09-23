@@ -45,4 +45,13 @@ void main() {
     expect(parsed.frames[7], 2);
     expect(parsed.names[7], 'サンプル馬');
   });
+
+  test('parses post time from RaceData01', () {
+    const html = '''
+<div class="RaceData01">
+15:40発走 /<span> 芝2000m</span>
+</div>
+''';
+    expect(RaceNetkeibaResultParser.parsePostTime(html), '15:40');
+  });
 }

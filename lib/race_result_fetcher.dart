@@ -23,12 +23,15 @@ class RaceTableInfo {
   });
 }
 
-/// レース名・開催日のパース結果
+/// レース名・開催日・発走時刻のパース結果
 class RaceMetaInfo {
   final String? raceName;
   final String? raceDateLabel;
 
-  const RaceMetaInfo({this.raceName, this.raceDateLabel});
+  /// 発走時刻（例: 15:40）
+  final String? postTime;
+
+  const RaceMetaInfo({this.raceName, this.raceDateLabel, this.postTime});
 }
 
 /// netkeiba DB のレース結果ページから払戻を取得する。
@@ -152,17 +155,23 @@ class RaceResultFetcher {
           (fallback.raceDateLabel != null && fallback.raceDateLabel!.isNotEmpty)
               ? fallback.raceDateLabel
               : primary.raceDateLabel,
+      postTime: (fallback.postTime != null && fallback.postTime!.isNotEmpty)
+          ? fallback.postTime
+          : primary.postTime,
       layoutRecognized:
           fallback.layoutRecognized || primary.layoutRecognized,
     );
   }
 
-  /// db.netkeiba に取消・除外が出ない場合、race/nar.netkeiba から返還馬を補完する
+  /// race/nar.netkeiba から返還馬・発走時刻などを補完する
   static Future<RaceResult> _enrichRefunds(
     RaceResult result, {
     required String raceIdFromUrl,
   }) async {
-    if (result.refundedHorseNumbers.isNotEmpty) return result;
+    final needsRefunds = result.refundedHorseNumbers.isEmpty;
+    final needsPostTime =
+        result.postTime == null || result.postTime!.isEmpty;
+    if (!needsRefunds && !needsPostTime) return result;
 
     final raceId = NetkeibaUrls.raceIdFromDbUrl(raceIdFromUrl);
     if (raceId == null) return result;
@@ -183,23 +192,33 @@ class RaceResultFetcher {
     try {
       final response = await HttpFetch.get(Uri.parse(resultUrl));
       if (response.statusCode != 200) return result;
-      final parsed =
-          RaceNetkeibaResultParser.parseRefundedHorses(response.body);
-      if (parsed.horses.isEmpty) return result;
+      final html = response.body;
+
+      final refundParsed = needsRefunds
+          ? RaceNetkeibaResultParser.parseRefundedHorses(html)
+          : null;
+      final postTime =
+          needsPostTime ? RaceNetkeibaResultParser.parsePostTime(html) : null;
+
+      final hasRefundUpdate =
+          refundParsed != null && refundParsed.horses.isNotEmpty;
+      final hasPostTimeUpdate = postTime != null && postTime.isNotEmpty;
+      if (!hasRefundUpdate && !hasPostTimeUpdate) return result;
 
       return result.copyWith(
         refundedHorseNumbers: {
           ...result.refundedHorseNumbers,
-          ...parsed.horses,
+          if (hasRefundUpdate) ...refundParsed.horses,
         },
         frameByHorseNumber: {
           ...result.frameByHorseNumber,
-          ...parsed.frames,
+          if (hasRefundUpdate) ...refundParsed.frames,
         },
         horseNamesByNumber: {
           ...result.horseNamesByNumber,
-          ...parsed.names,
+          if (hasRefundUpdate) ...refundParsed.names,
         },
+        postTime: hasPostTimeUpdate ? postTime : result.postTime,
       );
     } catch (_) {
       return result;
@@ -240,6 +259,7 @@ class RaceResultFetcher {
         fieldSize: table.fieldSize,
         raceName: meta.raceName,
         raceDateLabel: meta.raceDateLabel,
+        postTime: meta.postTime,
         layoutRecognized: layoutRecognized,
       );
     }
@@ -301,6 +321,7 @@ class RaceResultFetcher {
       fieldSize: table.fieldSize,
       raceName: meta.raceName,
       raceDateLabel: meta.raceDateLabel,
+      postTime: meta.postTime,
       layoutRecognized: recognized || payoutsByBetType.isNotEmpty,
     );
   }

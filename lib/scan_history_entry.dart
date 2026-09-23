@@ -53,7 +53,15 @@ class ScanHistoryEntry {
 
     final parts = <String>[];
 
-    if (t.year != null) {
+    final dateLabel = t.raceDateLabel;
+    if (dateLabel != null && dateLabel.isNotEmpty) {
+      final post = t.postTime;
+      if (post != null && post.isNotEmpty) {
+        parts.add('$dateLabel $post');
+      } else {
+        parts.add(dateLabel);
+      }
+    } else if (t.year != null) {
       final yearStr = LocalRaceUrlResolver.formatYearLabelForTicket(data, t.year!);
       parts.add('$yearStr 第${t.round}回 第${t.day}日');
     }
